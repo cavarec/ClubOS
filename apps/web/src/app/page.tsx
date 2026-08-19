@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Button, Logo, Tagline } from "@clubos/ui";
 
 const modules = [
@@ -8,6 +9,11 @@ const modules = [
   { title: "Paiements", desc: "Cotisations, boutique et échéanciers via Stripe, sans chèque oublié." },
   { title: "Communication", desc: "Un fil par club, par équipe — fini le bruit du groupe WhatsApp." },
   { title: "Site public", desc: "Généré automatiquement depuis vos données, zéro maintenance." },
+];
+
+const sports = [
+  "Handball", "Football", "Basketball", "Rugby", "Volleyball",
+  "Tennis", "Judo", "Natation", "Athlétisme", "Omnisports",
 ];
 
 export default function MarketingHome() {
@@ -55,7 +61,33 @@ export default function MarketingHome() {
         </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-4 px-6 pb-24 sm:grid-cols-2 md:grid-cols-3">
+      <section className="bg-navy px-6 py-16 md:py-20">
+        <div className="mx-auto flex max-w-5xl flex-col items-center gap-10 md:flex-row md:gap-16">
+          <Image
+            src="/brand/clubos-mark.png"
+            alt="Anneau des sports ClubOS : handball, football, basketball, rugby, volleyball, tennis, judo, natation, athlétisme"
+            width={532}
+            height={477}
+            className="w-56 shrink-0 md:w-72"
+          />
+          <div className="text-center md:text-left">
+            <h2 className="text-2xl font-bold text-white md:text-3xl">Un seul cœur technique, tous les sports</h2>
+            <p className="mt-3 max-w-md text-slate-300">
+              Le vocabulaire, les catégories d&apos;âge et les règles de composition changent selon le sport —
+              l&apos;architecture ClubOS, elle, ne change pas. Ajouter une discipline ne demande jamais de refonte.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2 md:justify-start">
+              {sports.map((sport) => (
+                <span key={sport} className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-slate-200">
+                  {sport}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-4 px-6 py-24 sm:grid-cols-2 md:grid-cols-3">
         {modules.map((m) => (
           <div key={m.title} className="rounded-lg border border-slate-200 bg-white p-5">
             <h3 className="font-semibold text-ink">{m.title}</h3>
