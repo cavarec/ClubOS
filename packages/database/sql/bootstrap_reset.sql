@@ -682,6 +682,43 @@ ALTER TABLE "public"."data_requests" ADD CONSTRAINT "data_requests_user_id_fkey"
 ALTER TABLE "public"."audit_logs" ADD CONSTRAINT "audit_logs_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- ===========================================================================
+-- Defaut gen_random_uuid() sur les colonnes id (Prisma le genere cote client
+-- via @default(uuid()), pas au niveau DB -- necessaire pour les inserts via
+-- le client Supabase direct, hors Prisma Client). profiles.id exclue : doit
+-- rester egale a auth.users.id.
+-- ===========================================================================
+
+alter table "public"."sports" alter column "id" set default gen_random_uuid();
+alter table "public"."tenants" alter column "id" set default gen_random_uuid();
+alter table "public"."seasons" alter column "id" set default gen_random_uuid();
+alter table "public"."memberships" alter column "id" set default gen_random_uuid();
+alter table "public"."guardianships" alter column "id" set default gen_random_uuid();
+alter table "public"."licenses" alter column "id" set default gen_random_uuid();
+alter table "public"."federation_connectors" alter column "id" set default gen_random_uuid();
+alter table "public"."federation_sync_logs" alter column "id" set default gen_random_uuid();
+alter table "public"."teams" alter column "id" set default gen_random_uuid();
+alter table "public"."team_members" alter column "id" set default gen_random_uuid();
+alter table "public"."events" alter column "id" set default gen_random_uuid();
+alter table "public"."convocations" alter column "id" set default gen_random_uuid();
+alter table "public"."carpools" alter column "id" set default gen_random_uuid();
+alter table "public"."carpool_bookings" alter column "id" set default gen_random_uuid();
+alter table "public"."posts" alter column "id" set default gen_random_uuid();
+alter table "public"."chat_messages" alter column "id" set default gen_random_uuid();
+alter table "public"."notifications" alter column "id" set default gen_random_uuid();
+alter table "public"."push_tokens" alter column "id" set default gen_random_uuid();
+alter table "public"."documents" alter column "id" set default gen_random_uuid();
+alter table "public"."products" alter column "id" set default gen_random_uuid();
+alter table "public"."orders" alter column "id" set default gen_random_uuid();
+alter table "public"."installments" alter column "id" set default gen_random_uuid();
+alter table "public"."sponsors" alter column "id" set default gen_random_uuid();
+alter table "public"."volunteer_missions" alter column "id" set default gen_random_uuid();
+alter table "public"."volunteer_assignments" alter column "id" set default gen_random_uuid();
+alter table "public"."site_pages" alter column "id" set default gen_random_uuid();
+alter table "public"."consents" alter column "id" set default gen_random_uuid();
+alter table "public"."data_requests" alter column "id" set default gen_random_uuid();
+alter table "public"."audit_logs" alter column "id" set default gen_random_uuid();
+
+-- ===========================================================================
 -- Extensions, hierarchie tenants (ltree), helpers JWT, RLS
 -- ===========================================================================
 
@@ -706,12 +743,12 @@ begin
   if new.parent_id is null then
     new.path := text2ltree(replace(new.id::text, '-', '_'));
   else
-    select path into parent_path from tenants where id = new.parent_id;
+    select path into parent_path from public.tenants where id = new.parent_id;
     new.path := parent_path || text2ltree(replace(new.id::text, '-', '_'));
   end if;
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql set search_path = public, extensions;
 
 drop trigger if exists trg_tenants_set_path on tenants;
 create trigger trg_tenants_set_path
@@ -729,25 +766,25 @@ create or replace function auth_jwt_tenant_ids() returns uuid[] as $$
     array(select jsonb_array_elements_text(auth.jwt() -> 'app_metadata' -> 'tenant_ids'))::uuid[],
     '{}'::uuid[]
   );
-$$ language sql stable;
+$$ language sql stable set search_path = public, extensions;
 
 create or replace function auth_jwt_supervisor_tenant_ids() returns uuid[] as $$
   select coalesce(
     array(select jsonb_array_elements_text(auth.jwt() -> 'app_metadata' -> 'supervisor_tenant_ids'))::uuid[],
     '{}'::uuid[]
   );
-$$ language sql stable;
+$$ language sql stable set search_path = public, extensions;
 
 -- Vrai si `target_tenant_id` est un descendant (ou soi-même) d'un des tenants supervisés par l'utilisateur
 create or replace function is_supervised_tenant(target_tenant_id uuid) returns boolean as $$
   select exists (
     select 1
-    from tenants supervised
-    join tenants target on target.id = target_tenant_id
-    where supervised.id = any(auth_jwt_supervisor_tenant_ids())
+    from public.tenants supervised
+    join public.tenants target on target.id = target_tenant_id
+    where supervised.id = any(public.auth_jwt_supervisor_tenant_ids())
       and target.path <@ supervised.path
   );
-$$ language sql stable;
+$$ language sql stable set search_path = public, extensions;
 
 -- ---------------------------------------------------------------------------
 -- RLS : tenants
@@ -778,6 +815,15 @@ create policy "tenants_update_admin" on tenants
 
 alter table memberships enable row level security;
 
+create or replace function is_tenant_admin(target_tenant_id uuid) returns boolean as $$
+  select exists (
+    select 1 from public.memberships
+    where tenant_id = target_tenant_id
+      and user_id = auth.uid()
+      and role in ('club_admin', 'committee_admin', 'league_admin', 'federation_admin')
+  );
+$$ language sql stable security definer set search_path = public, extensions;
+
 create policy "memberships_select_own_or_tenant_admin" on memberships
   for select using (
     user_id = auth.uid()
@@ -786,14 +832,7 @@ create policy "memberships_select_own_or_tenant_admin" on memberships
   );
 
 create policy "memberships_write_tenant_admin" on memberships
-  for all using (
-    exists (
-      select 1 from memberships admin
-      where admin.tenant_id = memberships.tenant_id
-        and admin.user_id = auth.uid()
-        and admin.role in ('club_admin', 'committee_admin', 'league_admin', 'federation_admin')
-    )
-  );
+  for all using (is_tenant_admin(tenant_id));
 
 -- ---------------------------------------------------------------------------
 -- RLS : teams / events (motif standard, réappliqué à l'identique pour
@@ -907,25 +946,69 @@ declare
   supervisor_tenant_ids uuid[];
 begin
   select coalesce(array_agg(m.tenant_id), '{}') into tenant_ids
-  from memberships m
+  from public.memberships m
   where m.user_id = uid and m.status = 'active';
 
   select coalesce(array_agg(m.tenant_id), '{}') into supervisor_tenant_ids
-  from memberships m
+  from public.memberships m
   where m.user_id = uid
     and m.status = 'active'
     and m.role in ('committee_admin', 'league_admin', 'federation_admin');
 
-  claims := event -> 'claims';
+  claims := coalesce(event -> 'claims', '{}'::jsonb);
   claims := jsonb_set(claims, '{app_metadata,tenant_ids}', to_jsonb(tenant_ids));
   claims := jsonb_set(claims, '{app_metadata,supervisor_tenant_ids}', to_jsonb(supervisor_tenant_ids));
 
   event := jsonb_set(event, '{claims}', claims);
   return event;
 end;
-$$ language plpgsql stable;
+$$ language plpgsql stable security definer set search_path = '';
 
 -- Le rôle `supabase_auth_admin` doit pouvoir exécuter ce hook (requis par Supabase)
 grant execute on function custom_access_token_hook(jsonb) to supabase_auth_admin;
 grant usage on schema public to supabase_auth_admin;
 revoke execute on function custom_access_token_hook(jsonb) from authenticated, anon, public;
+
+-- ===========================================================================
+-- Onboarding : profil auto-cree a l'inscription, creation de club atomique
+-- ===========================================================================
+
+create or replace function public.handle_new_user() returns trigger as $$
+begin
+  insert into public.profiles (id, first_name, last_name)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data ->> 'first_name', ''),
+    coalesce(new.raw_user_meta_data ->> 'last_name', '')
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$ language plpgsql security definer set search_path = '';
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+create or replace function public.create_club_with_admin(
+  p_name text,
+  p_slug text,
+  p_sport_id uuid,
+  p_user_id uuid
+) returns public.tenants as $$
+declare
+  v_tenant public.tenants;
+begin
+  insert into public.tenants (type, name, slug, sport_id)
+  values ('club', p_name, p_slug, p_sport_id)
+  returning * into v_tenant;
+
+  insert into public.memberships (tenant_id, user_id, role)
+  values (v_tenant.id, p_user_id, 'club_admin');
+
+  return v_tenant;
+end;
+$$ language plpgsql security definer set search_path = '';
+
+grant execute on function public.create_club_with_admin(text, text, uuid, uuid) to authenticated;

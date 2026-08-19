@@ -19,12 +19,12 @@ begin
   if new.parent_id is null then
     new.path := text2ltree(replace(new.id::text, '-', '_'));
   else
-    select path into parent_path from tenants where id = new.parent_id;
+    select path into parent_path from public.tenants where id = new.parent_id;
     new.path := parent_path || text2ltree(replace(new.id::text, '-', '_'));
   end if;
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql set search_path = public, extensions;
 
 drop trigger if exists trg_tenants_set_path on tenants;
 create trigger trg_tenants_set_path
@@ -42,25 +42,25 @@ create or replace function auth_jwt_tenant_ids() returns uuid[] as $$
     array(select jsonb_array_elements_text(auth.jwt() -> 'app_metadata' -> 'tenant_ids'))::uuid[],
     '{}'::uuid[]
   );
-$$ language sql stable;
+$$ language sql stable set search_path = public, extensions;
 
 create or replace function auth_jwt_supervisor_tenant_ids() returns uuid[] as $$
   select coalesce(
     array(select jsonb_array_elements_text(auth.jwt() -> 'app_metadata' -> 'supervisor_tenant_ids'))::uuid[],
     '{}'::uuid[]
   );
-$$ language sql stable;
+$$ language sql stable set search_path = public, extensions;
 
 -- Vrai si `target_tenant_id` est un descendant (ou soi-même) d'un des tenants supervisés par l'utilisateur
 create or replace function is_supervised_tenant(target_tenant_id uuid) returns boolean as $$
   select exists (
     select 1
-    from tenants supervised
-    join tenants target on target.id = target_tenant_id
-    where supervised.id = any(auth_jwt_supervisor_tenant_ids())
+    from public.tenants supervised
+    join public.tenants target on target.id = target_tenant_id
+    where supervised.id = any(public.auth_jwt_supervisor_tenant_ids())
       and target.path <@ supervised.path
   );
-$$ language sql stable;
+$$ language sql stable set search_path = public, extensions;
 
 -- ---------------------------------------------------------------------------
 -- RLS : tenants
@@ -91,6 +91,19 @@ create policy "tenants_update_admin" on tenants
 
 alter table memberships enable row level security;
 
+-- SECURITY DEFINER : contourne la RLS pour cette lecture interne. Sans ça,
+-- une policy sur `memberships` qui interroge `memberships` pour savoir si
+-- l'utilisateur est admin du tenant redéclenche l'évaluation de cette même
+-- policy sur la sous-requête -> récursion infinie (erreur Postgres 42P17).
+create or replace function is_tenant_admin(target_tenant_id uuid) returns boolean as $$
+  select exists (
+    select 1 from public.memberships
+    where tenant_id = target_tenant_id
+      and user_id = auth.uid()
+      and role in ('club_admin', 'committee_admin', 'league_admin', 'federation_admin')
+  );
+$$ language sql stable security definer set search_path = public, extensions;
+
 create policy "memberships_select_own_or_tenant_admin" on memberships
   for select using (
     user_id = auth.uid()
@@ -99,14 +112,7 @@ create policy "memberships_select_own_or_tenant_admin" on memberships
   );
 
 create policy "memberships_write_tenant_admin" on memberships
-  for all using (
-    exists (
-      select 1 from memberships admin
-      where admin.tenant_id = memberships.tenant_id
-        and admin.user_id = auth.uid()
-        and admin.role in ('club_admin', 'committee_admin', 'league_admin', 'federation_admin')
-    )
-  );
+  for all using (is_tenant_admin(tenant_id));
 
 -- ---------------------------------------------------------------------------
 -- RLS : teams / events (motif standard, réappliqué à l'identique pour

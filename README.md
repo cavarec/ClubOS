@@ -82,17 +82,18 @@ serveur de dev, navigation testée dans le navigateur) :
   pattern décrit pour l'ensemble des endpoints (`docs/05-API-PERMISSIONS.md`)
 - App mobile : structure Expo Router complète (onglets recomposables par rôle, écran convocations
   fonctionnel avec covoiturage, connexion par lien magique), typecheck propre
-- **Connexion à un vrai projet Supabase** : schéma déployé, RLS + droits par rôle + hook JWT
-  `custom_access_token_hook` vérifiés de bout en bout (auth par mot de passe, JWT décodé,
-  `tenant_ids`/`supervisor_tenant_ids` correctement injectés). Les pages listées ci-dessus
-  utilisent encore des données de démonstration (`apps/web/src/lib/mock-data.ts`) — la connexion
-  au backend réel est validée, mais les pages n'ont pas encore été rebranchées dessus (prochaine
-  étape logique).
+- **Parcours réel bout en bout vérifié contre le vrai Supabase** : inscription → création de
+  profil automatique → création de club (fonction atomique) → JWT rafraîchi avec les bons
+  `tenant_ids` → dashboard affichant de vraies données lues via RLS (`middleware.ts`,
+  `/auth/callback`, `/onboarding/club-setup`, dashboard rebranché). Testé avec une vraie session
+  utilisateur (pas de simulation), données de test nettoyées après coup.
 
 **Manquants pour un premier MVP utilisable** (voir `docs/08-ROADMAP-BACKLOG.md` pour l'ordre de
 priorité recommandé) :
 
-- Rebrancher les pages sur les vraies requêtes Supabase (actuellement sur `mock-data.ts`)
+- Rebrancher les autres pages sur de vraies requêtes Supabase (dashboard fait ; équipes,
+  convocations, présences, adhérents, communication, documents, membres restent sur
+  `apps/web/src/lib/mock-data.ts`)
 - Pages restantes de l'arborescence documentée (paiements, boutique, partenaires, paramètres >
   général/site-public/intégrations, sites publics des clubs, espaces comité/ligue)
 - Import CSV fédération (niveau 1), Edge Functions (`convocation-create`, `stripe-webhook` complet
@@ -106,6 +107,12 @@ priorité recommandé) :
 - **Server/Client Components** : tout composant de `packages/ui` qui attache lui-même un gestionnaire d'événement (`onClick`, ...) doit porter `"use client"` — sinon il casse silencieusement dès qu'il est rendu depuis une page Server Component, avec l'erreur "Event handlers cannot be passed to Client Components".
 - **Reset de schéma Supabase** : après un `DROP SCHEMA public CASCADE`, penser à regranter les droits de table à `anon`/`authenticated`/`service_role` (`GRANT ... ON SCHEMA` seul ne suffit pas — PostgREST renvoie 401/42501 sur toutes les tables sinon, même avec RLS correcte). `bootstrap_reset.sql` le fait via `ALTER DEFAULT PRIVILEGES` avant de créer les tables.
 - **Hook JWT `custom_access_token_hook`** : doit être `SECURITY DEFINER` (+ `set search_path = ''` et tables qualifiées `public.xxx`). Sans ça, la fonction tourne avec les droits de `supabase_auth_admin`, qui n'a ni accès direct aux tables ni de quoi passer la RLS dessus — le login échoue avec `500 unexpected_failure` / "Error running hook", sans autre détail côté client.
+- **`search_path` en cascade** : une fonction PL/pgSQL sans son propre `SET search_path` hérite du search_path *actif au moment de l'appel* — donc, appelée depuis une fonction `SECURITY DEFINER search_path = ''` (comme `create_club_with_admin`), elle hérite de ce search_path vide et ne résout plus les types d'extension (`ltree` → "type does not exist"). Toute fonction/trigger susceptible d'être appelée depuis un contexte à search_path restreint doit fixer le sien explicitement, indépendamment de l'appelant.
+- **Récursion RLS (erreur Postgres 42P17)** : une policy sur une table qui interroge cette même table dans sa sous-requête (ex. "suis-je admin de ce tenant ?" vérifié en relisant `memberships` depuis une policy sur `memberships`) redéclenche l'évaluation de cette policy à l'infini. Fix : déplacer la sous-requête dans une fonction `SECURITY DEFINER` (contourne la RLS pour cette lecture interne, comme le propriétaire de la table le ferait).
+- **Colonnes `id` sans défaut DB** : Prisma génère l'UUID côté client (`@default(uuid())`), ce qui n'est reflété nulle part dans le schéma DB réel — un insert via le client Supabase direct (hors Prisma Client, donc tout le runtime de l'app) échoue avec `null value in column "id"`. Fix : `@default(dbgenerated("gen_random_uuid()"))` dans `schema.prisma`, qui se traduit en `DEFAULT gen_random_uuid()` dans le DDL généré.
+- **Pas de profil = pas de membership possible** : rien ne crée automatiquement une ligne `profiles` à l'inscription (`auth.users` → `public.profiles`), alors que `memberships.user_id` référence `profiles.id`. Sans le trigger `on_auth_user_created` (`004_onboarding.sql`), le tout premier insert dans `memberships` d'un nouvel utilisateur échoue par violation de clé étrangère.
+- **Écriture non atomique = tenant orphelin** : créer un club en deux inserts séparés depuis l'API (tenant, puis membership admin) laisse un tenant sans admin si le second échoue — et bloque définitivement son `slug` pour toute nouvelle tentative. Fix : fonction SQL unique `create_club_with_admin` (transaction implicite d'une fonction PL/pgSQL), appelée via `.rpc()`.
+- **JWT figé à l'émission** : les claims custom (`tenant_ids`, ...) sont injectés une seule fois, à l'émission du token — créer un club en cours de session ne met pas à jour le token courant. Sans `supabase.auth.refreshSession()` après la création, les policies RLS basées sur `tenant_ids` ne voient pas encore le nouveau club tant que l'utilisateur n'obtient pas un token frais (`ClubSetupForm.tsx`).
 
 ## Handeo
 

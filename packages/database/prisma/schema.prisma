@@ -39,7 +39,7 @@ enum TenantType {
 }
 
 model Sport {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   slug      String   @unique // 'handball' | 'football' | 'basketball' | ...
   name      String
   config    Json     @default("{}") // catégories d'âge, règles de composition, etc.
@@ -52,7 +52,7 @@ model Sport {
 }
 
 model Tenant {
-  id             String     @id @default(uuid()) @db.Uuid
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   parentId       String?    @map("parent_id") @db.Uuid
   parent         Tenant?    @relation("TenantHierarchy", fields: [parentId], references: [id])
   children       Tenant[]   @relation("TenantHierarchy")
@@ -92,7 +92,7 @@ model Tenant {
 }
 
 model Season {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId  String   @map("tenant_id") @db.Uuid
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   label     String // "2026-2027"
@@ -155,7 +155,7 @@ enum MemberRole {
 }
 
 model Membership {
-  id        String     @id @default(uuid()) @db.Uuid
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId  String     @map("tenant_id") @db.Uuid
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   userId    String     @map("user_id") @db.Uuid
@@ -170,7 +170,7 @@ model Membership {
 }
 
 model Guardianship {
-  id        String  @id @default(uuid()) @db.Uuid
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   guardianId String @map("guardian_id") @db.Uuid
   guardian  Profile @relation("guardian", fields: [guardianId], references: [id], onDelete: Cascade)
   childId   String  @map("child_id") @db.Uuid
@@ -186,7 +186,7 @@ model Guardianship {
 // ---------------------------------------------------------------------------
 
 model License {
-  id                    String    @id @default(uuid()) @db.Uuid
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId              String    @map("tenant_id") @db.Uuid
   tenant                Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   profileId             String?   @map("profile_id") @db.Uuid
@@ -203,7 +203,7 @@ model License {
 }
 
 model FederationConnector {
-  id                  String    @id @default(uuid()) @db.Uuid
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId            String    @map("tenant_id") @db.Uuid
   tenant              Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   federationCode      String    @map("federation_code")
@@ -219,7 +219,7 @@ model FederationConnector {
 }
 
 model FederationSyncLog {
-  id               String               @id @default(uuid()) @db.Uuid
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   connectorId      String               @map("connector_id") @db.Uuid
   connector        FederationConnector  @relation(fields: [connectorId], references: [id], onDelete: Cascade)
   startedAt        DateTime             @default(now()) @map("started_at")
@@ -237,7 +237,7 @@ model FederationSyncLog {
 // ---------------------------------------------------------------------------
 
 model Team {
-  id        String       @id @default(uuid()) @db.Uuid
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId  String       @map("tenant_id") @db.Uuid
   tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   sportId   String       @map("sport_id") @db.Uuid
@@ -262,7 +262,7 @@ enum TeamMemberRole {
 }
 
 model TeamMember {
-  id       String         @id @default(uuid()) @db.Uuid
+  id       String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   teamId   String         @map("team_id") @db.Uuid
   team     Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
   userId   String         @map("user_id") @db.Uuid
@@ -283,7 +283,7 @@ enum EventType {
 }
 
 model ClubEvent {
-  id        String        @id @default(uuid()) @db.Uuid
+  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   teamId    String        @map("team_id") @db.Uuid
   team      Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
   type      EventType
@@ -307,7 +307,7 @@ model ClubEvent {
 // ---------------------------------------------------------------------------
 
 model Convocation {
-  id          String                 @id @default(uuid()) @db.Uuid
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   eventId     String                 @map("event_id") @db.Uuid
   event       ClubEvent              @relation(fields: [eventId], references: [id], onDelete: Cascade)
   createdBy   String                 @map("created_by") @db.Uuid
@@ -369,7 +369,7 @@ model Presence {
 // ---------------------------------------------------------------------------
 
 model Carpool {
-  id              String            @id @default(uuid()) @db.Uuid
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   eventId         String            @map("event_id") @db.Uuid
   event           ClubEvent         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   driverId        String            @map("driver_id") @db.Uuid
@@ -384,7 +384,7 @@ model Carpool {
 }
 
 model CarpoolBooking {
-  id           String  @id @default(uuid()) @db.Uuid
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   carpoolId    String  @map("carpool_id") @db.Uuid
   carpool      Carpool @relation(fields: [carpoolId], references: [id], onDelete: Cascade)
   passengerId  String  @map("passenger_id") @db.Uuid
@@ -409,7 +409,7 @@ enum PostScope {
 }
 
 model Post {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String    @map("tenant_id") @db.Uuid
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   teamId      String?   @map("team_id") @db.Uuid
@@ -426,7 +426,7 @@ model Post {
 }
 
 model ChatMessage {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   teamId    String   @map("team_id") @db.Uuid
   authorId  String   @map("author_id") @db.Uuid
   author    Profile  @relation(fields: [authorId], references: [id])
@@ -446,7 +446,7 @@ enum NotificationChannel {
 }
 
 model Notification {
-  id        String              @id @default(uuid()) @db.Uuid
+  id        String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId    String              @map("user_id") @db.Uuid
   profile   Profile             @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenantId  String?             @map("tenant_id") @db.Uuid
@@ -465,7 +465,7 @@ model Notification {
 }
 
 model PushToken {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId    String   @map("user_id") @db.Uuid
   profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String   @unique
@@ -481,7 +481,7 @@ model PushToken {
 // ---------------------------------------------------------------------------
 
 model Document {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String    @map("tenant_id") @db.Uuid
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   ownerUserId String?   @map("owner_user_id") @db.Uuid
@@ -508,7 +508,7 @@ enum ProductType {
 }
 
 model Product {
-  id         String      @id @default(uuid()) @db.Uuid
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId   String      @map("tenant_id") @db.Uuid
   tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   type       ProductType
@@ -531,7 +531,7 @@ enum OrderStatus {
 }
 
 model Order {
-  id                    String      @id @default(uuid()) @db.Uuid
+  id                    String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId              String      @map("tenant_id") @db.Uuid
   tenant                Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   userId                String      @map("user_id") @db.Uuid
@@ -550,7 +550,7 @@ model Order {
 }
 
 model Installment {
-  id         String   @id @default(uuid()) @db.Uuid
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orderId    String   @map("order_id") @db.Uuid
   order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   dueDate    DateTime @map("due_date") @db.Date
@@ -566,7 +566,7 @@ model Installment {
 // ---------------------------------------------------------------------------
 
 model Sponsor {
-  id           String    @id @default(uuid()) @db.Uuid
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId     String    @map("tenant_id") @db.Uuid
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name         String
@@ -581,7 +581,7 @@ model Sponsor {
 }
 
 model VolunteerMission {
-  id           String                @id @default(uuid()) @db.Uuid
+  id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId     String                @map("tenant_id") @db.Uuid
   tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   title        String
@@ -595,7 +595,7 @@ model VolunteerMission {
 }
 
 model VolunteerAssignment {
-  id         String            @id @default(uuid()) @db.Uuid
+  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   missionId  String            @map("mission_id") @db.Uuid
   mission    VolunteerMission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
   userId     String            @map("user_id") @db.Uuid
@@ -611,7 +611,7 @@ model VolunteerAssignment {
 // ---------------------------------------------------------------------------
 
 model SitePage {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId  String   @map("tenant_id") @db.Uuid
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   slug      String // 'accueil' | 'actualites' | 'contact' | ...
@@ -639,7 +639,7 @@ model SiteSettings {
 // ---------------------------------------------------------------------------
 
 model Consent {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId      String    @map("user_id") @db.Uuid
   profile     Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
   consentType String    @map("consent_type")
@@ -669,7 +669,7 @@ enum DataRequestStatus {
 }
 
 model DataRequest {
-  id          String             @id @default(uuid()) @db.Uuid
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId      String             @map("user_id") @db.Uuid
   profile     Profile            @relation(fields: [userId], references: [id], onDelete: Cascade)
   type        DataRequestType
@@ -683,7 +683,7 @@ model DataRequest {
 }
 
 model AuditLog {
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String?  @map("tenant_id") @db.Uuid
   tenant      Tenant?  @relation(fields: [tenantId], references: [id])
   actorId     String?  @map("actor_id") @db.Uuid
