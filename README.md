@@ -60,8 +60,11 @@ serveur de dev, navigation testée dans le navigateur) :
 - RLS multi-tenant et hook JWT `custom_access_token` (`packages/database/sql/`)
 - Design system web complet (`packages/ui`) : tokens, `Button`, `Card`, `Badge`, `Avatar` (badges
   d'initiales), `StatTile`, `ConvocationCard`, `PresenceToggle`, `PlayerRoster`, `PaymentCard`
-- App web : landing marketing, connexion par lien magique, dashboard club, page convocations
-  (interactive, réponses en un clic) — toutes rendues et vérifiées dans le navigateur
+- App web : landing marketing, connexion par lien magique, dashboard club, équipes (liste + fiche
+  effectif), calendrier, convocations (interactif), présences (pointage), adhérents (recherche +
+  alertes certificat), communication (fil + publication), documents (alertes d'expiration),
+  paramètres > membres (invitation) — toutes rendues et vérifiées dans le navigateur, zéro erreur
+  console
 - 2 endpoints métier implémentés (`/api/onboarding/club`, `/api/webhooks/stripe`) illustrant le
   pattern décrit pour l'ensemble des endpoints (`docs/05-API-PERMISSIONS.md`)
 - App mobile : structure Expo Router complète (onglets recomposables par rôle, écran convocations
@@ -70,10 +73,11 @@ serveur de dev, navigation testée dans le navigateur) :
 **Manquants pour un premier MVP utilisable** (voir `docs/08-ROADMAP-BACKLOG.md` pour l'ordre de
 priorité recommandé) :
 
-- Connexion à un vrai projet Supabase (le round-trip auth → onboarding → données réelles n'a pu
-  être testé qu'en logique, faute de projet connecté dans cet environnement)
-- Pages restantes de l'arborescence documentée (adhérents, équipes, présences, paiements,
-  boutique, documents, paramètres, sites publics des clubs, espaces comité/ligue)
+- Connexion à un vrai projet Supabase (toutes les pages listées ci-dessus utilisent des données de
+  démonstration — `apps/web/src/lib/mock-data.ts` — le round-trip auth → onboarding → données
+  réelles n'a pu être testé qu'en logique, faute de projet connecté dans cet environnement)
+- Pages restantes de l'arborescence documentée (paiements, boutique, partenaires, paramètres >
+  général/site-public/intégrations, sites publics des clubs, espaces comité/ligue)
 - Import CSV fédération (niveau 1), Edge Functions (`convocation-create`, `stripe-webhook` complet
   avec Stripe Connect onboarding, `federation-sync`, `public-site-revalidate`)
 - Notifications push réelles (Firebase Cloud Messaging), icônes/splash de production
