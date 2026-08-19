@@ -1,5 +1,16 @@
--- ClubOS — hook Supabase Auth : enrichit le JWT avec tenant_ids / supervisor_tenant_ids / roles
--- À enregistrer comme "Custom Access Token Hook" dans Supabase Dashboard > Authentication > Hooks.
+-- ===========================================================================
+-- ClubOS — correction du hook custom_access_token_hook
+-- ===========================================================================
+--
+-- Le hook etait bien enregistre mais plantait a l'execution ("Error running
+-- hook URI: pg-functions://postgres/public/custom_access_token_hook"), car
+-- il tourne avec les droits de `supabase_auth_admin`, qui n'a ni acces direct
+-- a `memberships` ni de quoi passer les policies RLS dessus.
+--
+-- Correction : SECURITY DEFINER (la fonction tourne avec les droits de son
+-- proprietaire postgres, qui contourne la RLS sur ses propres tables) +
+-- references de table qualifiees (necessaire avec search_path vide).
+-- ===========================================================================
 
 create or replace function custom_access_token_hook(event jsonb) returns jsonb as $$
 declare
@@ -26,13 +37,3 @@ begin
   return event;
 end;
 $$ language plpgsql stable security definer set search_path = '';
-
--- Le rôle `supabase_auth_admin` doit pouvoir exécuter ce hook (requis par Supabase)
-grant execute on function custom_access_token_hook(jsonb) to supabase_auth_admin;
-grant usage on schema public to supabase_auth_admin;
-revoke execute on function custom_access_token_hook(jsonb) from authenticated, anon, public;
-
--- SECURITY DEFINER fait tourner la fonction avec les droits de son
--- proprietaire (postgres, qui contourne la RLS sur ses propres tables) —
--- necessaire car supabase_auth_admin n'a ni acces direct a `memberships`
--- ni de quoi passer les policies RLS dessus.
