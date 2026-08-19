@@ -884,34 +884,34 @@ alter table convocations enable row level security;
 alter table convocation_responses enable row level security;
 alter table presences enable row level security;
 
+create or replace function is_convocation_participant(target_convocation_id uuid) returns boolean as $$
+  select exists (
+    select 1 from public.convocation_responses
+    where convocation_id = target_convocation_id and user_id = auth.uid()
+  );
+$$ language sql stable security definer set search_path = public, extensions;
+
+create or replace function is_convocation_manager(target_convocation_id uuid) returns boolean as $$
+  select exists (
+    select 1
+    from public.convocations c
+    join public.events e on e.id = c.event_id
+    join public.teams t on t.id = e.team_id
+    join public.memberships m on m.tenant_id = t.tenant_id
+    where c.id = target_convocation_id
+      and m.user_id = auth.uid()
+      and m.role in ('coach', 'director', 'club_admin')
+  );
+$$ language sql stable security definer set search_path = public, extensions;
+
 create policy "convocations_select_event_participants" on convocations
   for select using (
-    exists (
-      select 1 from convocation_responses cr
-      where cr.convocation_id = convocations.id and cr.user_id = auth.uid()
-    )
-    or exists (
-      select 1 from events e
-      join teams t on t.id = e.team_id
-      join memberships m on m.tenant_id = t.tenant_id
-      where e.id = convocations.event_id
-        and m.user_id = auth.uid()
-        and m.role in ('coach', 'director', 'club_admin')
-    )
+    is_convocation_participant(id) or is_convocation_manager(id)
   );
 
 create policy "convocation_responses_select_own_or_coach" on convocation_responses
   for select using (
-    user_id = auth.uid()
-    or exists (
-      select 1 from convocations c
-      join events e on e.id = c.event_id
-      join teams t on t.id = e.team_id
-      join memberships m on m.tenant_id = t.tenant_id
-      where c.id = convocation_responses.convocation_id
-        and m.user_id = auth.uid()
-        and m.role in ('coach', 'director', 'club_admin')
-    )
+    user_id = auth.uid() or is_convocation_manager(convocation_id)
   );
 
 create policy "convocation_responses_update_own" on convocation_responses
@@ -1012,3 +1012,95 @@ end;
 $$ language plpgsql security definer set search_path = '';
 
 grant execute on function public.create_club_with_admin(text, text, uuid, uuid) to authenticated;
+
+-- ===========================================================================
+-- RLS supplementaire : team_members, presences, posts, documents
+-- ===========================================================================
+
+alter table team_members enable row level security;
+
+create policy "team_members_select_tenant_member_or_supervisor" on team_members
+  for select using (
+    exists (
+      select 1 from teams t
+      where t.id = team_members.team_id
+        and (t.tenant_id = any(auth_jwt_tenant_ids()) or is_supervised_tenant(t.tenant_id))
+    )
+  );
+
+create policy "team_members_write_coach_or_admin" on team_members
+  for all using (
+    exists (
+      select 1 from teams t
+      join memberships m on m.tenant_id = t.tenant_id
+      where t.id = team_members.team_id
+        and m.user_id = auth.uid()
+        and m.role in ('coach', 'director', 'club_admin')
+    )
+  );
+
+create policy "presences_select_own_or_coach" on presences
+  for select using (
+    user_id = auth.uid()
+    or exists (
+      select 1 from events e
+      join teams t on t.id = e.team_id
+      join memberships m on m.tenant_id = t.tenant_id
+      where e.id = presences.event_id
+        and m.user_id = auth.uid()
+        and m.role in ('coach', 'director', 'club_admin')
+    )
+  );
+
+create policy "presences_write_coach_or_admin" on presences
+  for all using (
+    exists (
+      select 1 from events e
+      join teams t on t.id = e.team_id
+      join memberships m on m.tenant_id = t.tenant_id
+      where e.id = presences.event_id
+        and m.user_id = auth.uid()
+        and m.role in ('coach', 'director', 'club_admin')
+    )
+  );
+
+alter table posts enable row level security;
+
+create policy "posts_select_tenant_member_or_supervisor" on posts
+  for select using (
+    tenant_id = any(auth_jwt_tenant_ids())
+    or is_supervised_tenant(tenant_id)
+  );
+
+create policy "posts_write_coach_or_admin" on posts
+  for all using (
+    exists (
+      select 1 from memberships m
+      where m.tenant_id = posts.tenant_id
+        and m.user_id = auth.uid()
+        and m.role in ('coach', 'director', 'club_admin')
+    )
+  );
+
+alter table documents enable row level security;
+
+create policy "documents_select_owner_or_admin" on documents
+  for select using (
+    owner_user_id = auth.uid()
+    or exists (
+      select 1 from memberships m
+      where m.tenant_id = documents.tenant_id
+        and m.user_id = auth.uid()
+        and m.role in ('director', 'club_admin')
+    )
+  );
+
+create policy "documents_write_admin" on documents
+  for all using (
+    exists (
+      select 1 from memberships m
+      where m.tenant_id = documents.tenant_id
+        and m.user_id = auth.uid()
+        and m.role in ('director', 'club_admin')
+    )
+  );

@@ -1,65 +1,46 @@
-"use client";
+import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { CommunicationClient } from "./CommunicationClient";
 
-import { useState } from "react";
-import { Badge, Button } from "@clubos/ui";
-import { mockPosts } from "@/lib/mock-data";
+export default async function CommunicationPage({ params }: { params: Promise<{ clubSlug: string }> }) {
+  const { clubSlug } = await params;
+  const supabase = await createClient();
 
-const scopeLabel = { club: "Club", team: "Équipe", supervision: "Comité/Ligue" } as const;
+  const { data: tenant } = await supabase.from("tenants").select("id").eq("slug", clubSlug).maybeSingle();
+  if (!tenant) notFound();
 
-export default function CommunicationPage() {
-  const [posts, setPosts] = useState(mockPosts);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  function publish() {
-    if (!title.trim() || !body.trim()) return;
-    setPosts((prev) => [
-      { id: crypto.randomUUID(), scope: "club", title, body, author: "Vous", date: new Date().toISOString().slice(0, 10) },
-      ...prev,
-    ]);
-    setTitle("");
-    setBody("");
-  }
+  const { data: posts } = await supabase
+    .from("posts")
+    .select("id, scope, title, body, created_at, author:profiles(first_name, last_name)")
+    .eq("tenant_id", tenant.id)
+    .order("created_at", { ascending: false });
+
+  type RawPost = {
+    id: string;
+    scope: "club" | "team" | "supervision";
+    title: string;
+    body: string;
+    created_at: string;
+    author: { first_name: string; last_name: string } | null;
+  };
+
+  const initialPosts = ((posts ?? []) as unknown as RawPost[]).map((p) => ({
+    id: p.id,
+    scope: p.scope,
+    title: p.title,
+    body: p.body,
+    author: p.author ? `${p.author.first_name} ${p.author.last_name}` : "—",
+    date: new Date(p.created_at).toLocaleDateString("fr-FR"),
+  }));
 
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold text-ink">Communication</h1>
-
-      <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-4">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Titre de l'actualité"
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-        />
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Contenu…"
-          rows={3}
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-        />
-        <div className="flex justify-end">
-          <Button size="sm" onClick={publish}>
-            Publier
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        {posts.map((post) => (
-          <div key={post.id} className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="flex items-center justify-between">
-              <p className="font-semibold text-ink">{post.title}</p>
-              <Badge variant={post.scope === "club" ? "brand" : "neutral"}>{scopeLabel[post.scope]}</Badge>
-            </div>
-            <p className="mt-1 text-sm text-slate-600">{post.body}</p>
-            <p className="mt-2 text-xs text-slate-400">
-              {post.author} · {post.date}
-            </p>
-          </div>
-        ))}
-      </div>
+      <CommunicationClient tenantId={tenant.id} initialPosts={initialPosts} canPublish={!!user} />
     </div>
   );
 }

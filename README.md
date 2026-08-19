@@ -73,29 +73,28 @@ serveur de dev, navigation testée dans le navigateur) :
   d'initiales), `StatTile`, `ConvocationCard`, `PresenceToggle`, `PlayerRoster`, `PaymentCard`
 - Identité de marque appliquée (header marketing, sidebar app, écran de connexion, favicon) —
   recréée en code à partir de l'asset logo fourni (navy `#0B1E39` + dégradé bleu `#38BDF8→#1D4ED8`)
-- App web : landing marketing, connexion par lien magique, dashboard club, équipes (liste + fiche
-  effectif), calendrier, convocations (interactif), présences (pointage), adhérents (recherche +
-  alertes certificat), communication (fil + publication), documents (alertes d'expiration),
-  paramètres > membres (invitation) — toutes rendues et vérifiées dans le navigateur, zéro erreur
-  console
+- App web, **toutes les pages branchées sur de vraies requêtes Supabase** (plus de mock data) :
+  landing marketing, connexion par lien magique, onboarding de club, dashboard, équipes (liste +
+  fiche effectif), calendrier, convocations (réponse écrite en direct), présences (pointage écrit
+  en direct), adhérents (recherche + certificats via `licenses`), communication (fil + publication
+  écrite en direct), documents (alertes d'expiration), paramètres > membres. Chaque page + chaque
+  écriture (réponse convocation, pointage présence, publication) vérifiée avec une vraie session
+  utilisateur contre le vrai projet Supabase, données de test nettoyées après coup.
 - 2 endpoints métier implémentés (`/api/onboarding/club`, `/api/webhooks/stripe`) illustrant le
   pattern décrit pour l'ensemble des endpoints (`docs/05-API-PERMISSIONS.md`)
 - App mobile : structure Expo Router complète (onglets recomposables par rôle, écran convocations
   fonctionnel avec covoiturage, connexion par lien magique), typecheck propre
 - **Parcours réel bout en bout vérifié contre le vrai Supabase** : inscription → création de
   profil automatique → création de club (fonction atomique) → JWT rafraîchi avec les bons
-  `tenant_ids` → dashboard affichant de vraies données lues via RLS (`middleware.ts`,
-  `/auth/callback`, `/onboarding/club-setup`, dashboard rebranché). Testé avec une vraie session
-  utilisateur (pas de simulation), données de test nettoyées après coup.
+  `tenant_ids` → dashboard et toutes les pages affichant de vraies données lues/écrites via RLS
+  (`middleware.ts`, `/auth/callback`, `/onboarding/club-setup`).
 
 **Manquants pour un premier MVP utilisable** (voir `docs/08-ROADMAP-BACKLOG.md` pour l'ordre de
 priorité recommandé) :
 
-- Rebrancher les autres pages sur de vraies requêtes Supabase (dashboard fait ; équipes,
-  convocations, présences, adhérents, communication, documents, membres restent sur
-  `apps/web/src/lib/mock-data.ts`)
 - Pages restantes de l'arborescence documentée (paiements, boutique, partenaires, paramètres >
   général/site-public/intégrations, sites publics des clubs, espaces comité/ligue)
+- Système d'invitation par code (table dédiée — la page Membres a un placeholder explicite)
 - Import CSV fédération (niveau 1), Edge Functions (`convocation-create`, `stripe-webhook` complet
   avec Stripe Connect onboarding, `federation-sync`, `public-site-revalidate`)
 - Notifications push réelles (Firebase Cloud Messaging), icônes/splash de production
@@ -113,6 +112,7 @@ priorité recommandé) :
 - **Pas de profil = pas de membership possible** : rien ne crée automatiquement une ligne `profiles` à l'inscription (`auth.users` → `public.profiles`), alors que `memberships.user_id` référence `profiles.id`. Sans le trigger `on_auth_user_created` (`004_onboarding.sql`), le tout premier insert dans `memberships` d'un nouvel utilisateur échoue par violation de clé étrangère.
 - **Écriture non atomique = tenant orphelin** : créer un club en deux inserts séparés depuis l'API (tenant, puis membership admin) laisse un tenant sans admin si le second échoue — et bloque définitivement son `slug` pour toute nouvelle tentative. Fix : fonction SQL unique `create_club_with_admin` (transaction implicite d'une fonction PL/pgSQL), appelée via `.rpc()`.
 - **JWT figé à l'émission** : les claims custom (`tenant_ids`, ...) sont injectés une seule fois, à l'émission du token — créer un club en cours de session ne met pas à jour le token courant. Sans `supabase.auth.refreshSession()` après la création, les policies RLS basées sur `tenant_ids` ne voient pas encore le nouveau club tant que l'utilisateur n'obtient pas un token frais (`ClubSetupForm.tsx`).
+- **Récursion RLS croisée entre deux tables** : pas seulement le cas d'une table qui s'auto-référence (`memberships`, ci-dessus) — `convocations` et `convocation_responses` avaient chacune une policy qui interrogeait l'autre table, créant un cycle A→B→A→B... à l'infini. Même symptôme (`42P17`), même fix (fonctions `SECURITY DEFINER` : `is_convocation_participant`, `is_convocation_manager`). Réflexe à avoir : dès qu'une policy RLS contient un `exists (select ... from <une autre table avec RLS>)`, vérifier que cette autre table ne referme pas la boucle vers la première.
 
 ## Handeo
 
