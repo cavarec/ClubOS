@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Button } from "@clubos/ui";
+import { Button, Logo, Tagline } from "@clubos/ui";
 
 const modules = [
   { title: "Adhérents", desc: "Licenciés, familles, documents et certificats médicaux centralisés." },
@@ -14,7 +14,7 @@ export default function MarketingHome() {
   return (
     <main className="flex flex-1 flex-col">
       <header className="flex items-center justify-between px-6 py-4 md:px-12">
-        <span className="text-lg font-bold text-ink">ClubOS</span>
+        <Logo />
         <nav className="flex items-center gap-4">
           <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-ink">
             Se connecter
@@ -29,9 +29,7 @@ export default function MarketingHome() {
         <span className="rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold text-brand-700">
           Handball · Football · Basketball · Rugby · Volleyball · Tennis · Judo · Natation · Athlétisme
         </span>
-        <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-ink md:text-6xl">
-          Un club. Une plateforme.
-        </h1>
+        <Tagline size="lg" />
         <p className="max-w-xl text-lg text-slate-600">
           ClubOS remplace Kalisport, WhatsApp, Excel et vos outils de paiement dispersés par un seul système
           d&apos;exploitation numérique pour votre club sportif.
@@ -45,6 +43,15 @@ export default function MarketingHome() {
               Voir une démo
             </Button>
           </Link>
+        </div>
+        <div className="flex items-center gap-3 pt-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+          <span>Clubs</span>
+          <span className="h-3 w-px bg-slate-300" />
+          <span>Comités</span>
+          <span className="h-3 w-px bg-slate-300" />
+          <span>Ligues</span>
+          <span className="h-3 w-px bg-slate-300" />
+          <span>Fédérations</span>
         </div>
       </section>
 

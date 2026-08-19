@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@clubos/ui";
+import { Button, Logo } from "@clubos/ui";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -22,8 +22,8 @@ export default function LoginPage() {
   return (
     <main className="flex flex-1 items-center justify-center px-6">
       <form onSubmit={handleMagicLink} className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6">
-        <h1 className="text-xl font-semibold text-ink">Connexion à ClubOS</h1>
-        <p className="mt-1 text-sm text-slate-500">Recevez un lien de connexion par email, sans mot de passe.</p>
+        <Logo size="md" className="mb-2" />
+        <p className="text-sm text-slate-500">Recevez un lien de connexion par email, sans mot de passe.</p>
 
         <label className="mt-6 block text-sm font-medium text-slate-700" htmlFor="email">
           Email

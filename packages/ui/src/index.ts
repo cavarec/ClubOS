@@ -9,3 +9,4 @@ export * from './components/ConvocationCard';
 export * from './components/PresenceToggle';
 export * from './components/PlayerRoster';
 export * from './components/PaymentCard';
+export * from './components/Logo';

@@ -5,6 +5,11 @@
 export const colors = {
   // Neutrals
   ink: '#0F172A',
+  // Navy de marque — couleur du wordmark "Club" et de l'anneau extérieur du
+  // logo (cf. asset logo fourni). Plus profond que `ink`, réservé à
+  // l'identité de marque (logo, en-têtes marketing) plutôt qu'au texte
+  // courant de l'UI.
+  navy: '#0B1E39',
   slate: {
     50: '#F8FAFC',
     100: '#F1F5F9',
@@ -22,6 +27,7 @@ export const colors = {
     50: '#EFF6FF',
     100: '#DBEAFE',
     300: '#93C5FD',
+    400: '#38BDF8',
     500: '#2563EB',
     600: '#1D4ED8',
     700: '#1E40AF',
@@ -30,6 +36,30 @@ export const colors = {
   warning: '#D97706',
   danger: '#DC2626',
 } as const;
+
+// Dégradé de la partie "OS" du wordmark et de l'icône power du logo —
+// cyan clair vers bleu profond.
+export const brandGradient = {
+  from: colors.brand[400],
+  to: colors.brand[600],
+  css: `linear-gradient(135deg, ${colors.brand[400]} 0%, ${colors.brand[600]} 100%)`,
+} as const;
+
+// Palette par sport — inspirée de l'anneau d'icônes multicolores du logo.
+// Utilisée pour coder visuellement les badges d'équipe/catégorie par sport
+// dans les listes multi-sport (comité/ligue).
+export const sportColors: Record<string, string> = {
+  handball: '#1E3A8A',
+  football: '#16A34A',
+  basketball: '#F97316',
+  rugby: '#DC2626',
+  volleyball: '#F59E0B',
+  tennis: '#65A30D',
+  judo: '#7C3AED',
+  natation: '#0891B2',
+  athletisme: '#DB2777',
+  omnisports: '#6B7280',
+};
 
 export const spacing = {
   xs: '0.25rem',

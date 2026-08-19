@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@clubos/ui";
 
 const navItems = [
   { href: "dashboard", label: "Tableau de bord" },
@@ -27,7 +28,9 @@ export default async function ClubLayout({
   return (
     <div className="flex min-h-screen flex-1">
       <aside className="hidden w-56 shrink-0 border-r border-slate-200 bg-white p-4 md:block">
-        <p className="mb-4 px-2 text-lg font-bold text-ink">ClubOS</p>
+        <div className="mb-4 px-2">
+          <Logo size="sm" />
+        </div>
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => (
             <Link

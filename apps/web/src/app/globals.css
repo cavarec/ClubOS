@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* packages/ui vit hors de apps/web/ : la détection de contenu automatique
+   de Tailwind v4 ne le scanne pas par défaut, donc les classes utilisées
+   uniquement dans ses composants (bg-brand-600, text-white, ...) ne sont
+   jamais générées sans cette source explicite. */
+@source "../../../../packages/ui/src/**/*.{ts,tsx}";
+
 :root {
   --background: #ffffff;
   --foreground: #0f172a;
@@ -13,10 +19,12 @@
 
   /* ClubOS design tokens — cf. packages/ui/src/tokens.ts */
   --color-ink: #0f172a;
+  --color-navy: #0b1e39;
 
   --color-brand-50: #eff6ff;
   --color-brand-100: #dbeafe;
   --color-brand-300: #93c5fd;
+  --color-brand-400: #38bdf8;
   --color-brand-500: #2563eb;
   --color-brand-600: #1d4ed8;
   --color-brand-700: #1e40af;
@@ -24,6 +32,18 @@
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-danger: #dc2626;
+
+  /* Palette par sport — cf. packages/ui/src/tokens.ts::sportColors */
+  --color-sport-handball: #1e3a8a;
+  --color-sport-football: #16a34a;
+  --color-sport-basketball: #f97316;
+  --color-sport-rugby: #dc2626;
+  --color-sport-volleyball: #f59e0b;
+  --color-sport-tennis: #65a30d;
+  --color-sport-judo: #7c3aed;
+  --color-sport-natation: #0891b2;
+  --color-sport-athletisme: #db2777;
+  --color-sport-omnisports: #6b7280;
 }
 
 body {

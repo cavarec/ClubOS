@@ -58,8 +58,11 @@ serveur de dev, navigation testée dans le navigateur) :
   `ltree`, identité/RBAC, licences fédérales, équipes/calendrier, convocations/présences,
   covoiturage, communication, documents, paiements, partenaires, bénévolat, site public, RGPD)
 - RLS multi-tenant et hook JWT `custom_access_token` (`packages/database/sql/`)
-- Design system web complet (`packages/ui`) : tokens, `Button`, `Card`, `Badge`, `Avatar` (badges
+- Design system web complet (`packages/ui`) : tokens (dont la palette de marque navy/dégradé bleu
+  et la palette par sport), `Logo`/`Tagline`, `Button`, `Card`, `Badge`, `Avatar` (badges
   d'initiales), `StatTile`, `ConvocationCard`, `PresenceToggle`, `PlayerRoster`, `PaymentCard`
+- Identité de marque appliquée (header marketing, sidebar app, écran de connexion, favicon) —
+  recréée en code à partir de l'asset logo fourni (navy `#0B1E39` + dégradé bleu `#38BDF8→#1D4ED8`)
 - App web : landing marketing, connexion par lien magique, dashboard club, équipes (liste + fiche
   effectif), calendrier, convocations (interactif), présences (pointage), adhérents (recherche +
   alertes certificat), communication (fil + publication), documents (alertes d'expiration),
@@ -82,6 +85,11 @@ priorité recommandé) :
   avec Stripe Connect onboarding, `federation-sync`, `public-site-revalidate`)
 - Notifications push réelles (Firebase Cloud Messaging), icônes/splash de production
 - Tests automatisés (Vitest, Playwright) et pipeline CI/CD (`docs/07-CONFORMITE-DEVOPS.md`)
+
+## Notes techniques
+
+- **Tailwind v4 et monorepo** : `apps/web/src/app/globals.css` déclare `@source "../../../../packages/ui/src/**/*.{ts,tsx}";` — sans cette ligne, la détection de contenu automatique de Tailwind v4 ne scanne pas `packages/ui` (hors de l'arborescence `apps/web`), et les classes utilisées uniquement dans ses composants (`bg-brand-600`, `text-white`, ...) ne sont jamais générées, silencieusement (pas d'erreur de build, juste des éléments non stylés). Si un nouveau package partagé avec des classes Tailwind est ajouté, il faut lui ajouter sa propre ligne `@source`.
+- **Server/Client Components** : tout composant de `packages/ui` qui attache lui-même un gestionnaire d'événement (`onClick`, ...) doit porter `"use client"` — sinon il casse silencieusement dès qu'il est rendu depuis une page Server Component, avec l'erreur "Event handlers cannot be passed to Client Components".
 
 ## Handeo
 
