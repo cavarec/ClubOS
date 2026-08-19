@@ -1,0 +1,698 @@
+// ClubOS — schéma de données
+// Source de vérité pour le typage applicatif (web + mobile).
+// Les policies RLS ne sont pas exprimables en Prisma : voir ../sql/001_init.sql.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["public", "auth"]
+}
+
+// ---------------------------------------------------------------------------
+// Shadow model vers auth.users (géré par Supabase Auth, jamais migré par Prisma)
+// ---------------------------------------------------------------------------
+
+model AuthUser {
+  id      String   @id @db.Uuid
+  profile Profile?
+
+  @@map("users")
+  @@schema("auth")
+}
+
+// ---------------------------------------------------------------------------
+// Organisation : sports, tenants (hiérarchie fédération > ligue > comité > club), saisons
+// ---------------------------------------------------------------------------
+
+enum TenantType {
+  federation
+  league
+  committee
+  club
+
+  @@schema("public")
+}
+
+model Sport {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique // 'handball' | 'football' | 'basketball' | ...
+  name      String
+  config    Json     @default("{}") // catégories d'âge, règles de composition, etc.
+  tenants   Tenant[]
+  teams     Team[]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("sports")
+  @@schema("public")
+}
+
+model Tenant {
+  id             String     @id @default(uuid()) @db.Uuid
+  parentId       String?    @map("parent_id") @db.Uuid
+  parent         Tenant?    @relation("TenantHierarchy", fields: [parentId], references: [id])
+  children       Tenant[]   @relation("TenantHierarchy")
+  type           TenantType
+  sportId        String?    @map("sport_id") @db.Uuid
+  sport          Sport?     @relation(fields: [sportId], references: [id])
+  name           String
+  slug           String     @unique
+  subdomain      String?    @unique
+  customDomain   String?    @unique @map("custom_domain")
+  logoUrl        String?    @map("logo_url")
+  address        Json?
+  siret          String?
+  stripeAccountId String?   @map("stripe_account_id")
+  settings       Json       @default("{}")
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  seasons             Season[]
+  memberships          Membership[]
+  teams                Team[]
+  licenses              License[]
+  federationConnectors  FederationConnector[]
+  posts                 Post[]
+  documents             Document[]
+  products              Product[]
+  orders                Order[]
+  sponsors              Sponsor[]
+  volunteerMissions     VolunteerMission[]
+  sitePages             SitePage[]
+  siteSettings          SiteSettings?
+  auditLogs             AuditLog[]
+  notifications         Notification[]
+
+  @@index([parentId])
+  @@map("tenants")
+  @@schema("public")
+}
+
+model Season {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  label     String // "2026-2027"
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+  teams     Team[]
+
+  @@map("seasons")
+  @@schema("public")
+}
+
+// ---------------------------------------------------------------------------
+// Identité : profils, memberships (RBAC), tutelle parent/enfant
+// ---------------------------------------------------------------------------
+
+model Profile {
+  id        String    @id @db.Uuid
+  user      AuthUser  @relation(fields: [id], references: [id], onDelete: Cascade)
+  firstName String    @map("first_name")
+  lastName  String    @map("last_name")
+  phone     String?
+  avatarUrl String?   @map("avatar_url")
+  birthDate DateTime? @map("birth_date") @db.Date
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  memberships          Membership[]
+  guardianOf           Guardianship[]        @relation("guardian")
+  childOf              Guardianship[]        @relation("child")
+  teamMembers          TeamMember[]
+  convocationsCreated  Convocation[]         @relation("convocationCreator")
+  convocationResponses ConvocationResponse[]
+  presences            Presence[]
+  postsAuthored        Post[]
+  chatMessages         ChatMessage[]
+  documentsOwned       Document[]            @relation("documentOwner")
+  orders               Order[]
+  carpoolsAsDriver     Carpool[]             @relation("carpoolDriver")
+  carpoolBookings      CarpoolBooking[]
+  volunteerAssignments VolunteerAssignment[]
+  notifications        Notification[]
+  pushTokens           PushToken[]
+  consents             Consent[]
+  dataRequests         DataRequest[]
+
+  @@map("profiles")
+  @@schema("public")
+}
+
+enum MemberRole {
+  player
+  parent
+  coach
+  director
+  club_admin
+  committee_admin
+  league_admin
+  federation_admin
+
+  @@schema("public")
+}
+
+model Membership {
+  id        String     @id @default(uuid()) @db.Uuid
+  tenantId  String     @map("tenant_id") @db.Uuid
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String     @map("user_id") @db.Uuid
+  profile   Profile    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      MemberRole
+  status    String     @default("active") // active | pending | archived
+  joinedAt  DateTime   @default(now()) @map("joined_at")
+
+  @@unique([tenantId, userId, role])
+  @@map("memberships")
+  @@schema("public")
+}
+
+model Guardianship {
+  id        String  @id @default(uuid()) @db.Uuid
+  guardianId String @map("guardian_id") @db.Uuid
+  guardian  Profile @relation("guardian", fields: [guardianId], references: [id], onDelete: Cascade)
+  childId   String  @map("child_id") @db.Uuid
+  child     Profile @relation("child", fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([guardianId, childId])
+  @@map("guardianships")
+  @@schema("public")
+}
+
+// ---------------------------------------------------------------------------
+// Licences fédérales et connecteurs
+// ---------------------------------------------------------------------------
+
+model License {
+  id                    String    @id @default(uuid()) @db.Uuid
+  tenantId              String    @map("tenant_id") @db.Uuid
+  tenant                Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  profileId             String?   @map("profile_id") @db.Uuid
+  licenseNumber         String    @map("license_number")
+  category              String?
+  federationCode        String    @map("federation_code") // 'ffhb' | 'fff' | ...
+  medicalCertificateExp DateTime? @map("medical_certificate_exp") @db.Date
+  source                String    @default("csv_import") // csv_import | sync | api
+  syncedAt              DateTime? @map("synced_at")
+
+  @@unique([tenantId, licenseNumber])
+  @@map("licenses")
+  @@schema("public")
+}
+
+model FederationConnector {
+  id                  String    @id @default(uuid()) @db.Uuid
+  tenantId            String    @map("tenant_id") @db.Uuid
+  tenant              Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  federationCode      String    @map("federation_code")
+  level               Int // 1 | 2 | 3
+  credentialsEncrypted String?  @map("credentials_encrypted")
+  status              String    @default("inactive") // inactive | active | error
+  lastSyncedAt        DateTime? @map("last_synced_at")
+  syncLogs            FederationSyncLog[]
+
+  @@unique([tenantId, federationCode])
+  @@map("federation_connectors")
+  @@schema("public")
+}
+
+model FederationSyncLog {
+  id               String               @id @default(uuid()) @db.Uuid
+  connectorId      String               @map("connector_id") @db.Uuid
+  connector        FederationConnector  @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  startedAt        DateTime             @default(now()) @map("started_at")
+  finishedAt       DateTime?            @map("finished_at")
+  recordsImported  Int                  @default(0) @map("records_imported")
+  recordsUpdated   Int                  @default(0) @map("records_updated")
+  errors           Json?
+
+  @@map("federation_sync_logs")
+  @@schema("public")
+}
+
+// ---------------------------------------------------------------------------
+// Équipes et calendrier
+// ---------------------------------------------------------------------------
+
+model Team {
+  id        String       @id @default(uuid()) @db.Uuid
+  tenantId  String       @map("tenant_id") @db.Uuid
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sportId   String       @map("sport_id") @db.Uuid
+  sport     Sport        @relation(fields: [sportId], references: [id])
+  seasonId  String       @map("season_id") @db.Uuid
+  season    Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  name      String
+  category  String // "U15 M", "Seniors F", ...
+  members   TeamMember[]
+  events    ClubEvent[]
+
+  @@map("teams")
+  @@schema("public")
+}
+
+enum TeamMemberRole {
+  player
+  coach
+  manager
+
+  @@schema("public")
+}
+
+model TeamMember {
+  id       String         @id @default(uuid()) @db.Uuid
+  teamId   String         @map("team_id") @db.Uuid
+  team     Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId   String         @map("user_id") @db.Uuid
+  profile  Profile        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     TeamMemberRole
+
+  @@unique([teamId, userId, role])
+  @@map("team_members")
+  @@schema("public")
+}
+
+enum EventType {
+  match
+  training
+  other
+
+  @@schema("public")
+}
+
+model ClubEvent {
+  id        String        @id @default(uuid()) @db.Uuid
+  teamId    String        @map("team_id") @db.Uuid
+  team      Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  type      EventType
+  title     String
+  startAt   DateTime      @map("start_at")
+  endAt     DateTime      @map("end_at")
+  location  String?
+  opponent  String?
+  isHome    Boolean?      @map("is_home")
+
+  convocations Convocation[]
+  presences    Presence[]
+  carpools     Carpool[]
+
+  @@map("events")
+  @@schema("public")
+}
+
+// ---------------------------------------------------------------------------
+// Convocations et présences
+// ---------------------------------------------------------------------------
+
+model Convocation {
+  id          String                 @id @default(uuid()) @db.Uuid
+  eventId     String                 @map("event_id") @db.Uuid
+  event       ClubEvent              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy   String                 @map("created_by") @db.Uuid
+  creator     Profile                @relation("convocationCreator", fields: [createdBy], references: [id])
+  aiSuggested Boolean                @default(false) @map("ai_suggested")
+  createdAt   DateTime               @default(now()) @map("created_at")
+  responses   ConvocationResponse[]
+
+  @@map("convocations")
+  @@schema("public")
+}
+
+enum ConvocationResponseStatus {
+  pending
+  present
+  absent
+  maybe
+
+  @@schema("public")
+}
+
+model ConvocationResponse {
+  convocationId String                    @map("convocation_id") @db.Uuid
+  convocation   Convocation               @relation(fields: [convocationId], references: [id], onDelete: Cascade)
+  userId        String                    @map("user_id") @db.Uuid
+  profile       Profile                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status        ConvocationResponseStatus @default(pending)
+  respondedAt   DateTime?                 @map("responded_at")
+
+  @@id([convocationId, userId])
+  @@map("convocation_responses")
+  @@schema("public")
+}
+
+enum PresenceStatus {
+  present
+  absent
+  excused
+
+  @@schema("public")
+}
+
+model Presence {
+  eventId    String         @map("event_id") @db.Uuid
+  event      ClubEvent      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId     String         @map("user_id") @db.Uuid
+  profile    Profile        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status     PresenceStatus
+  recordedBy String         @map("recorded_by") @db.Uuid
+  recordedAt DateTime       @default(now()) @map("recorded_at")
+
+  @@id([eventId, userId])
+  @@map("presences")
+  @@schema("public")
+}
+
+// ---------------------------------------------------------------------------
+// Covoiturage
+// ---------------------------------------------------------------------------
+
+model Carpool {
+  id              String            @id @default(uuid()) @db.Uuid
+  eventId         String            @map("event_id") @db.Uuid
+  event           ClubEvent         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  driverId        String            @map("driver_id") @db.Uuid
+  driver          Profile           @relation("carpoolDriver", fields: [driverId], references: [id])
+  seatsTotal      Int               @map("seats_total")
+  departurePoint  String?           @map("departure_point")
+  departureTime   DateTime?         @map("departure_time")
+  bookings        CarpoolBooking[]
+
+  @@map("carpools")
+  @@schema("public")
+}
+
+model CarpoolBooking {
+  id           String  @id @default(uuid()) @db.Uuid
+  carpoolId    String  @map("carpool_id") @db.Uuid
+  carpool      Carpool @relation(fields: [carpoolId], references: [id], onDelete: Cascade)
+  passengerId  String  @map("passenger_id") @db.Uuid
+  passenger    Profile @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+  seatsBooked  Int     @default(1) @map("seats_booked")
+
+  @@unique([carpoolId, passengerId])
+  @@map("carpool_bookings")
+  @@schema("public")
+}
+
+// ---------------------------------------------------------------------------
+// Communication
+// ---------------------------------------------------------------------------
+
+enum PostScope {
+  club
+  team
+  supervision // publication descendante comité/ligue
+
+  @@schema("public")
+}
+
+model Post {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  teamId      String?   @map("team_id") @db.Uuid
+  scope       PostScope @default(club)
+  authorId    String    @map("author_id") @db.Uuid
+  author      Profile   @relation(fields: [authorId], references: [id])
+  title       String
+  body        String
+  publishedAt DateTime? @map("published_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("posts")
+  @@schema("public")
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  teamId    String   @map("team_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  author    Profile  @relation(fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("chat_messages")
+  @@schema("public")
+}
+
+enum NotificationChannel {
+  push
+  email
+  sms
+
+  @@schema("public")
+}
+
+model Notification {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @map("user_id") @db.Uuid
+  profile   Profile             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId  String?             @map("tenant_id") @db.Uuid
+  tenant    Tenant?             @relation(fields: [tenantId], references: [id])
+  type      String
+  title     String
+  body      String
+  deepLink  String?             @map("deep_link")
+  channel   NotificationChannel
+  readAt    DateTime?           @map("read_at")
+  sentAt    DateTime?           @map("sent_at")
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  @@map("notifications")
+  @@schema("public")
+}
+
+model PushToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String // 'ios' | 'android' | 'web'
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("push_tokens")
+  @@schema("public")
+}
+
+// ---------------------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------------------
+
+model Document {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownerUserId String?   @map("owner_user_id") @db.Uuid
+  owner       Profile?  @relation("documentOwner", fields: [ownerUserId], references: [id])
+  category    String // certificat_medical | reglement | autre
+  fileUrl     String    @map("file_url")
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("documents")
+  @@schema("public")
+}
+
+// ---------------------------------------------------------------------------
+// Paiements
+// ---------------------------------------------------------------------------
+
+enum ProductType {
+  cotisation
+  boutique
+  billetterie
+
+  @@schema("public")
+}
+
+model Product {
+  id         String      @id @default(uuid()) @db.Uuid
+  tenantId   String      @map("tenant_id") @db.Uuid
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type       ProductType
+  name       String
+  priceCents Int         @map("price_cents")
+  active     Boolean     @default(true)
+  orders     Order[]
+
+  @@map("products")
+  @@schema("public")
+}
+
+enum OrderStatus {
+  pending
+  paid
+  failed
+  refunded
+
+  @@schema("public")
+}
+
+model Order {
+  id                    String      @id @default(uuid()) @db.Uuid
+  tenantId              String      @map("tenant_id") @db.Uuid
+  tenant                Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId                String      @map("user_id") @db.Uuid
+  profile               Profile     @relation(fields: [userId], references: [id])
+  productId              String     @map("product_id") @db.Uuid
+  product                Product    @relation(fields: [productId], references: [id])
+  status                 OrderStatus @default(pending)
+  amountCents            Int        @map("amount_cents")
+  stripeCheckoutSessionId String?   @map("stripe_checkout_session_id")
+  stripePaymentIntentId   String?   @map("stripe_payment_intent_id")
+  createdAt              DateTime   @default(now()) @map("created_at")
+  installments            Installment[]
+
+  @@map("orders")
+  @@schema("public")
+}
+
+model Installment {
+  id         String   @id @default(uuid()) @db.Uuid
+  orderId    String   @map("order_id") @db.Uuid
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  dueDate    DateTime @map("due_date") @db.Date
+  amountCents Int     @map("amount_cents")
+  status     String   @default("pending") // pending | paid | failed
+
+  @@map("installments")
+  @@schema("public")
+}
+
+// ---------------------------------------------------------------------------
+// Partenaires et bénévolat
+// ---------------------------------------------------------------------------
+
+model Sponsor {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  logoUrl      String?   @map("logo_url")
+  websiteUrl   String?   @map("website_url")
+  tier         String? // or | argent | bronze
+  visibleFrom  DateTime? @map("visible_from") @db.Date
+  visibleTo    DateTime? @map("visible_to") @db.Date
+
+  @@map("sponsors")
+  @@schema("public")
+}
+
+model VolunteerMission {
+  id           String                @id @default(uuid()) @db.Uuid
+  tenantId     String                @map("tenant_id") @db.Uuid
+  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  eventId      String?               @map("event_id") @db.Uuid
+  slotsNeeded  Int                   @default(1) @map("slots_needed")
+  assignments  VolunteerAssignment[]
+
+  @@map("volunteer_missions")
+  @@schema("public")
+}
+
+model VolunteerAssignment {
+  id         String            @id @default(uuid()) @db.Uuid
+  missionId  String            @map("mission_id") @db.Uuid
+  mission    VolunteerMission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  userId     String            @map("user_id") @db.Uuid
+  profile    Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hoursLogged Decimal?         @map("hours_logged") @db.Decimal(5, 2)
+
+  @@map("volunteer_assignments")
+  @@schema("public")
+}
+
+// ---------------------------------------------------------------------------
+// Site public
+// ---------------------------------------------------------------------------
+
+model SitePage {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  slug      String // 'accueil' | 'actualites' | 'contact' | ...
+  content   Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, slug])
+  @@map("site_pages")
+  @@schema("public")
+}
+
+model SiteSettings {
+  tenantId       String  @id @map("tenant_id") @db.Uuid
+  tenant         Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  primaryColor   String? @map("primary_color")
+  secondaryColor String? @map("secondary_color")
+  sectionsVisible Json   @default("[]") @map("sections_visible")
+
+  @@map("site_settings")
+  @@schema("public")
+}
+
+// ---------------------------------------------------------------------------
+// Conformité RGPD
+// ---------------------------------------------------------------------------
+
+model Consent {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  profile     Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consentType String    @map("consent_type")
+  granted     Boolean
+  grantedAt   DateTime? @map("granted_at")
+  revokedAt   DateTime? @map("revoked_at")
+
+  @@map("consents")
+  @@schema("public")
+}
+
+enum DataRequestType {
+  export
+  deletion
+  rectification
+
+  @@schema("public")
+}
+
+enum DataRequestStatus {
+  pending
+  processing
+  completed
+  rejected
+
+  @@schema("public")
+}
+
+model DataRequest {
+  id          String             @id @default(uuid()) @db.Uuid
+  userId      String             @map("user_id") @db.Uuid
+  profile     Profile            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        DataRequestType
+  status      DataRequestStatus  @default(pending)
+  requestedAt DateTime           @default(now()) @map("requested_at")
+  completedAt DateTime?          @map("completed_at")
+  exportUrl   String?            @map("export_url")
+
+  @@map("data_requests")
+  @@schema("public")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String?  @map("tenant_id") @db.Uuid
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+  actorId     String?  @map("actor_id") @db.Uuid
+  action      String
+  targetTable String?  @map("target_table")
+  targetId    String?  @map("target_id") @db.Uuid
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+  @@schema("public")
+}
