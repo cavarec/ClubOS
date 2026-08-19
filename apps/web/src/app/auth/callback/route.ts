@@ -6,6 +6,10 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
+  const next = searchParams.get("next");
+  // Uniquement un chemin interne relatif ("/join/ABC123"), jamais une URL
+  // absolue ni un "//" (protocol-relative) — évite l'open redirect.
+  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login`);
@@ -24,6 +28,10 @@ export async function GET(request: NextRequest) {
 
   if (!user) {
     return NextResponse.redirect(`${origin}/login`);
+  }
+
+  if (safeNext) {
+    return NextResponse.redirect(`${origin}${safeNext}`);
   }
 
   const { data: membership } = await supabase

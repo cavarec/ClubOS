@@ -29,7 +29,8 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isPublic = PUBLIC_PATHS.includes(request.nextUrl.pathname);
+  const isPublic =
+    PUBLIC_PATHS.includes(request.nextUrl.pathname) || request.nextUrl.pathname.startsWith("/join/");
 
   if (!user && !isPublic) {
     const redirectUrl = new URL("/login", request.url);

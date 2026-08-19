@@ -88,13 +88,18 @@ serveur de dev, navigation testée dans le navigateur) :
   profil automatique → création de club (fonction atomique) → JWT rafraîchi avec les bons
   `tenant_ids` → dashboard et toutes les pages affichant de vraies données lues/écrites via RLS
   (`middleware.ts`, `/auth/callback`, `/onboarding/club-setup`).
+- **Invitation de membres par code** (`invitations` + `join_via_invite_code`) : un admin/dirigeant
+  génère un lien à usage limité pour un rôle donné (`packages/database/sql/006_invitations.sql`,
+  `/api/invitations`, page Paramètres > Membres) ; `/join/[code]` gère la connexion si besoin
+  (`next` param sur `/auth/callback`) puis rattache l'utilisateur au tenant. Testé avec 3 comptes
+  réels (admin + 2 rejoignants), rôles corrects vérifiés en base.
+- **Paramètres > Général** : édition du nom/logo/SIRET du club, écriture directe RLS-protégée.
 
 **Manquants pour un premier MVP utilisable** (voir `docs/08-ROADMAP-BACKLOG.md` pour l'ordre de
 priorité recommandé) :
 
 - Pages restantes de l'arborescence documentée (paiements, boutique, partenaires, paramètres >
-  général/site-public/intégrations, sites publics des clubs, espaces comité/ligue)
-- Système d'invitation par code (table dédiée — la page Membres a un placeholder explicite)
+  site-public/intégrations, sites publics des clubs, espaces comité/ligue)
 - Import CSV fédération (niveau 1), Edge Functions (`convocation-create`, `stripe-webhook` complet
   avec Stripe Connect onboarding, `federation-sync`, `public-site-revalidate`)
 - Notifications push réelles (Firebase Cloud Messaging), icônes/splash de production
@@ -113,6 +118,8 @@ priorité recommandé) :
 - **Écriture non atomique = tenant orphelin** : créer un club en deux inserts séparés depuis l'API (tenant, puis membership admin) laisse un tenant sans admin si le second échoue — et bloque définitivement son `slug` pour toute nouvelle tentative. Fix : fonction SQL unique `create_club_with_admin` (transaction implicite d'une fonction PL/pgSQL), appelée via `.rpc()`.
 - **JWT figé à l'émission** : les claims custom (`tenant_ids`, ...) sont injectés une seule fois, à l'émission du token — créer un club en cours de session ne met pas à jour le token courant. Sans `supabase.auth.refreshSession()` après la création, les policies RLS basées sur `tenant_ids` ne voient pas encore le nouveau club tant que l'utilisateur n'obtient pas un token frais (`ClubSetupForm.tsx`).
 - **Récursion RLS croisée entre deux tables** : pas seulement le cas d'une table qui s'auto-référence (`memberships`, ci-dessus) — `convocations` et `convocation_responses` avaient chacune une policy qui interrogeait l'autre table, créant un cycle A→B→A→B... à l'infini. Même symptôme (`42P17`), même fix (fonctions `SECURITY DEFINER` : `is_convocation_participant`, `is_convocation_manager`). Réflexe à avoir : dès qu'une policy RLS contient un `exists (select ... from <une autre table avec RLS>)`, vérifier que cette autre table ne referme pas la boucle vers la première.
+- **Le fix `refreshSession()` s'applique à toute mutation qui change les claims JWT**, pas seulement à la création de club : rejoindre un club via `/join/[code]` a le même besoin (`JoinClient.tsx`) — sans ça, `notFound()` sur le dashboard juste après avoir rejoint (RLS voit encore `tenant_ids: []`). Pattern à réappliquer pour toute future action qui change `memberships` en cours de session.
+- **Compte créé avant l'existence d'un trigger** : le trigger `on_auth_user_created` ne joue que sur les *nouveaux* inserts dans `auth.users` — un compte déjà existant au moment où le trigger est ajouté n'est jamais rattrapé automatiquement. Vu en conditions réelles (compte de test créé avant le trigger, `insert on memberships` en échec par FK). Fix ponctuel : `insert into profiles` manuel pour ce compte ; pas de backfill générique fait (un seul cas rencontré).
 
 ## Handeo
 

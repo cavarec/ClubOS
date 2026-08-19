@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Avatar, Badge } from "@clubos/ui";
 import { createClient } from "@/lib/supabase/server";
+import { InviteGenerator } from "./InviteGenerator";
 
 const roleLabel: Record<string, string> = {
   player: "Joueur",
@@ -26,6 +27,12 @@ export default async function MembresPage({ params }: { params: Promise<{ clubSl
     .eq("tenant_id", tenant.id)
     .eq("status", "active");
 
+  const { data: invitations } = await supabase
+    .from("invitations")
+    .select("code, role, used_count, max_uses, expires_at, created_at")
+    .eq("tenant_id", tenant.id)
+    .order("created_at", { ascending: false });
+
   type RawMembership = {
     role: string;
     profile: { id: string; first_name: string; last_name: string; avatar_url: string | null } | null;
@@ -37,13 +44,7 @@ export default async function MembresPage({ params }: { params: Promise<{ clubSl
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold text-ink">Membres du club</h1>
 
-      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
-        <p className="text-sm text-slate-500">
-          L&apos;invitation par code n&apos;est pas encore implémentée (nécessite une table
-          d&apos;invitations dédiée) — pour l&apos;instant, les membres doivent être créés via
-          l&apos;onboarding ou directement en base.
-        </p>
-      </div>
+      <InviteGenerator clubSlug={clubSlug} initialInvitations={invitations ?? []} />
 
       <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
         {members.map((m) => (
