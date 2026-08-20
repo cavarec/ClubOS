@@ -1,10 +1,18 @@
+import { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../src/theme';
+import { registerForPushNotificationsAsync } from '../../src/lib/notifications';
 
 // TODO(auth): recomposer les onglets selon le rôle (cf. docs/02-ARCHITECTURE.md
 // §7 Navigation par rôle) — "Présences" visible uniquement coach/admin.
 export default function TabsLayout() {
+  useEffect(() => {
+    // Best-effort : échec silencieux (permission refusée, simulateur, pas
+    // de projet EAS configuré) — ne doit jamais bloquer l'accès à l'app.
+    registerForPushNotificationsAsync().catch(() => {});
+  }, []);
+
   return (
     <Tabs
       screenOptions={{

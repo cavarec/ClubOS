@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Badge } from "@clubos/ui";
-import { createClient } from "@/lib/supabase/client";
 import { CreateEventForm } from "./CreateEventForm";
 import type { EventType } from "@clubos/database";
 
@@ -35,36 +34,16 @@ export function CalendrierClient({
 
   async function handleConvoke(event: EventItem) {
     setConvokingId(event.id);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
+
+    const res = await fetch("/api/convocations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventId: event.id }),
+    });
+
+    if (!res.ok) {
       setConvokingId(null);
       return;
-    }
-
-    const { data: convocation, error: convocationError } = await supabase
-      .from("convocations")
-      .insert({ event_id: event.id, created_by: user.id })
-      .select("id")
-      .single();
-
-    if (convocationError || !convocation) {
-      setConvokingId(null);
-      return;
-    }
-
-    const { data: players } = await supabase
-      .from("team_members")
-      .select("user_id")
-      .eq("team_id", event.team_id)
-      .eq("role", "player");
-
-    if (players && players.length > 0) {
-      await supabase
-        .from("convocation_responses")
-        .insert(players.map((p) => ({ convocation_id: convocation.id, user_id: p.user_id, status: "pending" })));
     }
 
     setConvoked((prev) => new Set(prev).add(event.id));
