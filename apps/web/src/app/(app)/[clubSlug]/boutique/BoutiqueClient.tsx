@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button, Badge } from "@clubos/ui";
 import { createClient } from "@/lib/supabase/client";
+import { formatAmount } from "@/lib/format";
 
 interface Product {
   id: string;
@@ -32,10 +33,6 @@ const statusVariant: Record<Order["status"], "warning" | "success" | "danger" | 
   failed: "danger",
   refunded: "neutral",
 };
-
-function formatAmount(cents: number): string {
-  return (cents / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
-}
 
 export function BoutiqueClient({
   tenantId,

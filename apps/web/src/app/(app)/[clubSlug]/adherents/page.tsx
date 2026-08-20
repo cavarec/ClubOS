@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { certificateStatus as getCertificateStatus } from "@/lib/certificate";
 import { AdherentsList } from "./AdherentsList";
 
 export default async function AdherentsPage({ params }: { params: Promise<{ clubSlug: string }> }) {
@@ -25,8 +26,6 @@ export default async function AdherentsPage({ params }: { params: Promise<{ club
     if (l.profile_id) licenseByProfile.set(l.profile_id, { licenseNumber: l.license_number, medicalCertificateExp: l.medical_certificate_exp });
   }
 
-  const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
   type RawMembership = {
     role: string;
     profile: {
@@ -43,11 +42,6 @@ export default async function AdherentsPage({ params }: { params: Promise<{ club
     .filter((m) => m.profile)
     .map((m) => {
       const license = licenseByProfile.get(m.profile!.id);
-      let certificateStatus: "ok" | "expiring" | "expired" | "none" = "none";
-      if (license?.medicalCertificateExp) {
-        const expDate = new Date(license.medicalCertificateExp);
-        certificateStatus = expDate < new Date() ? "expired" : expDate < in30Days ? "expiring" : "ok";
-      }
       return {
         id: m.profile!.id,
         firstName: m.profile!.first_name,
@@ -57,7 +51,7 @@ export default async function AdherentsPage({ params }: { params: Promise<{ club
         birthDate: m.profile!.birth_date,
         licenseNumber: license?.licenseNumber ?? "",
         medicalCertificateExp: license?.medicalCertificateExp ?? "",
-        certificateStatus,
+        certificateStatus: getCertificateStatus(license?.medicalCertificateExp ?? null),
       };
     });
 

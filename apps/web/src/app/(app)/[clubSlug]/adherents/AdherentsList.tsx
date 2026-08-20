@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Avatar, Badge, Button } from "@clubos/ui";
+import { certificateStatus as getCertificateStatus } from "@/lib/certificate";
 
 const roleLabel: Record<string, string> = {
   player: "Joueur",
@@ -235,17 +236,15 @@ function EditAdherentForm({
       return;
     }
 
-    const expDate = medicalCertificateExp ? new Date(medicalCertificateExp) : null;
-    const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    const certificateStatus: Member["certificateStatus"] = !expDate
-      ? "none"
-      : expDate < new Date()
-        ? "expired"
-        : expDate < in30Days
-          ? "expiring"
-          : "ok";
-
-    onSaved({ firstName, lastName, phone, birthDate, licenseNumber, medicalCertificateExp, certificateStatus });
+    onSaved({
+      firstName,
+      lastName,
+      phone,
+      birthDate,
+      licenseNumber,
+      medicalCertificateExp,
+      certificateStatus: getCertificateStatus(medicalCertificateExp || null),
+    });
   }
 
   return (

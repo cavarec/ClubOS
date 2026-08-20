@@ -1,21 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { generateInvitationCode } from "@/lib/invitationCode";
 
 const bodySchema = z.object({
   clubSlug: z.string().min(1),
   role: z.enum(["player", "parent", "coach", "director", "club_admin"]),
 });
-
-const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sans 0/O/1/I, ambigus à l'oral/écrit
-
-function generateCode(length = 8): string {
-  let code = "";
-  for (let i = 0; i < length; i++) {
-    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
-  }
-  return code;
-}
 
 // Génère un code d'invitation pour le club courant. RLS (invitations_write_admin)
 // garantit que seul un director/club_admin du tenant peut réussir l'insert —
@@ -51,7 +42,7 @@ export async function POST(req: NextRequest) {
       .from("invitations")
       .insert({
         tenant_id: tenant.id,
-        code: generateCode(),
+        code: generateInvitationCode(),
         role: parsed.data.role,
         created_by: user.id,
       })

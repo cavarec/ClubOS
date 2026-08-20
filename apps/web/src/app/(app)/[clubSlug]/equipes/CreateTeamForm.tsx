@@ -3,21 +3,11 @@
 import { useState } from "react";
 import { Button } from "@clubos/ui";
 import { createClient } from "@/lib/supabase/client";
+import { currentSeasonLabel } from "@/lib/season";
 
 interface Sport {
   id: string;
   name: string;
-}
-
-function currentSeasonLabel(): { label: string; startDate: string; endDate: string } {
-  const now = new Date();
-  // Saison sportive française classique : septembre → août.
-  const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-  return {
-    label: `${startYear}-${startYear + 1}`,
-    startDate: `${startYear}-09-01`,
-    endDate: `${startYear + 1}-08-31`,
-  };
 }
 
 export function CreateTeamForm({
