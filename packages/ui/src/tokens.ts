@@ -32,9 +32,11 @@ export const colors = {
     600: '#1D4ED8',
     700: '#1E40AF',
   },
-  success: '#16A34A',
-  warning: '#D97706',
-  danger: '#DC2626',
+  // Accent secondaire (cyan) — cf. design system, utilisé en complément du bleu de marque
+  secondary: '#06B6D4',
+  success: '#10B981',
+  warning: '#F59E0B',
+  danger: '#EF4444',
 } as const;
 
 // Dégradé de la partie "OS" du wordmark et de l'icône power du logo —
@@ -71,11 +73,17 @@ export const spacing = {
 } as const;
 
 export const radius = {
-  sm: '0.375rem',
-  md: '0.5rem',
-  lg: '0.75rem',
-  xl: '1rem',
+  sm: '0.5rem',
+  md: '0.75rem',
+  lg: '1rem',
+  xl: '1.5rem',
   full: '9999px',
+} as const;
+
+export const shadow = {
+  sm: '0 2px 8px rgba(15, 23, 42, 0.05)',
+  md: '0 8px 24px rgba(15, 23, 42, 0.08)',
+  lg: '0 18px 40px rgba(15, 23, 42, 0.12)',
 } as const;
 
 export const typography = {

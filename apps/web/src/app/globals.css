@@ -9,6 +9,18 @@
 :root {
   --background: #ffffff;
   --foreground: #0f172a;
+
+  /* Échelle de rayons et d'ombres — cf. packages/ui/src/tokens.ts::radius/shadow.
+     Variables brutes, hors @theme : ne remplacent pas l'échelle rounded/shadow
+     par défaut de Tailwind, disponibles pour un usage explicite au besoin. */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 18px 40px rgba(15, 23, 42, 0.12);
 }
 
 @theme inline {
@@ -29,9 +41,12 @@
   --color-brand-600: #1d4ed8;
   --color-brand-700: #1e40af;
 
-  --color-success: #16a34a;
-  --color-warning: #d97706;
-  --color-danger: #dc2626;
+  /* Accent secondaire (cyan) — cf. packages/ui/src/tokens.ts::colors.secondary */
+  --color-secondary: #06b6d4;
+
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
 
   /* Palette par sport — cf. packages/ui/src/tokens.ts::sportColors */
   --color-sport-handball: #1e3a8a;

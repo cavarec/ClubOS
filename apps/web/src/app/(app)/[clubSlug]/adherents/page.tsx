@@ -11,34 +11,41 @@ export default async function AdherentsPage({ params }: { params: Promise<{ club
 
   const { data: memberships } = await supabase
     .from("memberships")
-    .select("role, profile:profiles(id, first_name, last_name, avatar_url)")
+    .select("role, profile:profiles(id, first_name, last_name, avatar_url, phone, birth_date)")
     .eq("tenant_id", tenant.id)
     .eq("status", "active");
 
   const { data: licenses } = await supabase
     .from("licenses")
-    .select("profile_id, medical_certificate_exp")
+    .select("profile_id, license_number, medical_certificate_exp")
     .eq("tenant_id", tenant.id);
 
-  const certExpByProfile = new Map<string, string | null>();
+  const licenseByProfile = new Map<string, { licenseNumber: string; medicalCertificateExp: string | null }>();
   for (const l of licenses ?? []) {
-    if (l.profile_id) certExpByProfile.set(l.profile_id, l.medical_certificate_exp);
+    if (l.profile_id) licenseByProfile.set(l.profile_id, { licenseNumber: l.license_number, medicalCertificateExp: l.medical_certificate_exp });
   }
 
   const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
   type RawMembership = {
     role: string;
-    profile: { id: string; first_name: string; last_name: string; avatar_url: string | null } | null;
+    profile: {
+      id: string;
+      first_name: string;
+      last_name: string;
+      avatar_url: string | null;
+      phone: string | null;
+      birth_date: string | null;
+    } | null;
   };
 
   const members = ((memberships ?? []) as unknown as RawMembership[])
     .filter((m) => m.profile)
     .map((m) => {
-      const exp = certExpByProfile.get(m.profile!.id);
+      const license = licenseByProfile.get(m.profile!.id);
       let certificateStatus: "ok" | "expiring" | "expired" | "none" = "none";
-      if (exp) {
-        const expDate = new Date(exp);
+      if (license?.medicalCertificateExp) {
+        const expDate = new Date(license.medicalCertificateExp);
         certificateStatus = expDate < new Date() ? "expired" : expDate < in30Days ? "expiring" : "ok";
       }
       return {
@@ -46,6 +53,10 @@ export default async function AdherentsPage({ params }: { params: Promise<{ club
         firstName: m.profile!.first_name,
         lastName: m.profile!.last_name,
         role: m.role,
+        phone: m.profile!.phone,
+        birthDate: m.profile!.birth_date,
+        licenseNumber: license?.licenseNumber ?? "",
+        medicalCertificateExp: license?.medicalCertificateExp ?? "",
         certificateStatus,
       };
     });
@@ -56,7 +67,7 @@ export default async function AdherentsPage({ params }: { params: Promise<{ club
         <h1 className="text-2xl font-semibold text-ink">Adhérents</h1>
         <span className="text-sm text-slate-500">{members.length} licenciés</span>
       </div>
-      <AdherentsList members={members} />
+      <AdherentsList clubSlug={clubSlug} members={members} />
     </div>
   );
 }

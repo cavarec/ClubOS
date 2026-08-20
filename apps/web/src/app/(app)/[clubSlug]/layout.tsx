@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@clubos/ui";
+import { createClient } from "@/lib/supabase/server";
 
 const navItems = [
   { href: "dashboard", label: "Tableau de bord" },
@@ -24,6 +25,13 @@ export default async function ClubLayout({
   params: Promise<{ clubSlug: string }>;
 }) {
   const { clubSlug } = await params;
+  const supabase = await createClient();
+  const { data: tenant } = await supabase.from("tenants").select("type").eq("slug", clubSlug).maybeSingle();
+
+  const items =
+    tenant?.type && tenant.type !== "club"
+      ? [{ href: "supervision", label: "Supervision" }, ...navItems.filter((i) => i.href !== "equipes" && i.href !== "presences")]
+      : navItems;
 
   return (
     <div className="flex min-h-screen flex-1">
@@ -32,7 +40,7 @@ export default async function ClubLayout({
           <Logo size="sm" />
         </div>
         <nav className="flex flex-col gap-1">
-          {navItems.map((item) => (
+          {items.map((item) => (
             <Link
               key={item.href}
               href={`/${clubSlug}/${item.href}`}

@@ -1195,3 +1195,342 @@ end;
 $$ language plpgsql security definer set search_path = public, extensions;
 
 grant execute on function public.join_via_invite_code(text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- RLS : seasons, écriture convocations/convocation_responses
+-- cf. 009_rls_seasons_convocations_write.sql
+-- ---------------------------------------------------------------------------
+
+alter table seasons enable row level security;
+
+create policy "seasons_select_tenant_member_or_supervisor" on seasons
+  for select using (
+    tenant_id = any(auth_jwt_tenant_ids())
+    or is_supervised_tenant(tenant_id)
+  );
+
+create policy "seasons_write_admin" on seasons
+  for all using (is_tenant_admin(tenant_id));
+
+create or replace function is_event_manager(target_event_id uuid) returns boolean as $$
+  select exists (
+    select 1
+    from public.events e
+    join public.teams t on t.id = e.team_id
+    join public.memberships m on m.tenant_id = t.tenant_id
+    where e.id = target_event_id
+      and m.user_id = auth.uid()
+      and m.role in ('coach', 'director', 'club_admin')
+  );
+$$ language sql stable security definer set search_path = public, extensions;
+
+create policy "convocations_write_manager" on convocations
+  for all using (is_event_manager(event_id))
+  with check (is_event_manager(event_id));
+
+create policy "convocation_responses_insert_manager" on convocation_responses
+  for insert with check (is_convocation_manager(convocation_id));
+
+create policy "convocation_responses_delete_manager" on convocation_responses
+  for delete using (is_convocation_manager(convocation_id));
+
+-- ---------------------------------------------------------------------------
+-- RLS : profiles, guardianships — cf. 008_rls_profiles_guardianships.sql
+-- ---------------------------------------------------------------------------
+
+alter table profiles enable row level security;
+
+create policy "profiles_select_shared_tenant_or_self" on profiles
+  for select using (
+    id = auth.uid()
+    or exists (
+      select 1 from memberships m1
+      join memberships m2 on m2.tenant_id = m1.tenant_id
+      where m1.user_id = auth.uid() and m2.user_id = profiles.id
+    )
+    or exists (
+      select 1 from memberships m
+      where m.user_id = profiles.id and is_supervised_tenant(m.tenant_id)
+    )
+  );
+
+create policy "profiles_update_self_or_tenant_admin" on profiles
+  for update using (
+    id = auth.uid()
+    or exists (
+      select 1 from memberships m
+      where m.user_id = profiles.id
+        and is_tenant_admin(m.tenant_id)
+    )
+  );
+
+alter table guardianships enable row level security;
+
+create policy "guardianships_select_own_or_admin" on guardianships
+  for select using (
+    guardian_id = auth.uid()
+    or child_id = auth.uid()
+    or exists (
+      select 1 from memberships m
+      where m.user_id = guardianships.child_id
+        and is_tenant_admin(m.tenant_id)
+    )
+  );
+
+create policy "guardianships_write_tenant_admin" on guardianships
+  for all using (
+    exists (
+      select 1 from memberships m
+      where m.user_id = guardianships.child_id
+        and is_tenant_admin(m.tenant_id)
+    )
+  );
+
+-- ---------------------------------------------------------------------------
+-- RLS : tables restantes du schéma initial (sponsors, products, orders,
+-- installments, site_pages, site_settings, volunteer_*, carpools,
+-- chat_messages, push_tokens, notifications, licenses, federation_*,
+-- consents, data_requests) — cf. 007_rls_remaining_tables.sql
+-- ---------------------------------------------------------------------------
+
+alter table sponsors enable row level security;
+
+create policy "sponsors_select_tenant_member_or_supervisor" on sponsors
+  for select using (
+    tenant_id = any(auth_jwt_tenant_ids())
+    or is_supervised_tenant(tenant_id)
+  );
+
+create policy "sponsors_write_admin" on sponsors
+  for all using (is_tenant_admin(tenant_id));
+
+alter table products enable row level security;
+
+create policy "products_select_tenant_member_or_supervisor" on products
+  for select using (
+    tenant_id = any(auth_jwt_tenant_ids())
+    or is_supervised_tenant(tenant_id)
+  );
+
+create policy "products_write_admin" on products
+  for all using (is_tenant_admin(tenant_id));
+
+alter table orders enable row level security;
+
+create policy "orders_select_own_or_admin" on orders
+  for select using (
+    user_id = auth.uid()
+    or is_tenant_admin(tenant_id)
+  );
+
+create policy "orders_insert_own" on orders
+  for insert with check (
+    user_id = auth.uid()
+    and tenant_id = any(auth_jwt_tenant_ids())
+  );
+
+create policy "orders_update_admin" on orders
+  for update using (is_tenant_admin(tenant_id));
+
+alter table installments enable row level security;
+
+create policy "installments_select_own_or_admin" on installments
+  for select using (
+    exists (
+      select 1 from orders o
+      where o.id = installments.order_id
+        and (o.user_id = auth.uid() or is_tenant_admin(o.tenant_id))
+    )
+  );
+
+create policy "installments_write_admin" on installments
+  for all using (
+    exists (
+      select 1 from orders o
+      where o.id = installments.order_id
+        and is_tenant_admin(o.tenant_id)
+    )
+  );
+
+create or replace view public.tenants_public
+  with (security_invoker = false) as
+  select id, name, slug, logo_url from public.tenants;
+
+grant select on public.tenants_public to anon, authenticated;
+
+alter table site_pages enable row level security;
+
+create policy "site_pages_select_public" on site_pages
+  for select using (true);
+
+create policy "site_pages_write_admin" on site_pages
+  for all using (is_tenant_admin(tenant_id));
+
+alter table site_settings enable row level security;
+
+create policy "site_settings_select_public" on site_settings
+  for select using (true);
+
+create policy "site_settings_write_admin" on site_settings
+  for all using (is_tenant_admin(tenant_id));
+
+alter table volunteer_missions enable row level security;
+
+create policy "volunteer_missions_select_tenant_member_or_supervisor" on volunteer_missions
+  for select using (
+    tenant_id = any(auth_jwt_tenant_ids())
+    or is_supervised_tenant(tenant_id)
+  );
+
+create policy "volunteer_missions_write_admin" on volunteer_missions
+  for all using (is_tenant_admin(tenant_id));
+
+alter table volunteer_assignments enable row level security;
+
+create policy "volunteer_assignments_select_own_or_admin" on volunteer_assignments
+  for select using (
+    user_id = auth.uid()
+    or exists (
+      select 1 from volunteer_missions vm
+      where vm.id = volunteer_assignments.mission_id
+        and is_tenant_admin(vm.tenant_id)
+    )
+  );
+
+create policy "volunteer_assignments_insert_own" on volunteer_assignments
+  for insert with check (user_id = auth.uid());
+
+create policy "volunteer_assignments_delete_own_or_admin" on volunteer_assignments
+  for delete using (
+    user_id = auth.uid()
+    or exists (
+      select 1 from volunteer_missions vm
+      where vm.id = volunteer_assignments.mission_id
+        and is_tenant_admin(vm.tenant_id)
+    )
+  );
+
+alter table carpools enable row level security;
+
+create policy "carpools_select_tenant_member" on carpools
+  for select using (
+    exists (
+      select 1 from events e
+      join teams t on t.id = e.team_id
+      where e.id = carpools.event_id
+        and (t.tenant_id = any(auth_jwt_tenant_ids()) or is_supervised_tenant(t.tenant_id))
+    )
+  );
+
+create policy "carpools_write_own_or_admin" on carpools
+  for all using (
+    driver_id = auth.uid()
+    or exists (
+      select 1 from events e
+      join teams t on t.id = e.team_id
+      where e.id = carpools.event_id
+        and is_tenant_admin(t.tenant_id)
+    )
+  );
+
+alter table carpool_bookings enable row level security;
+
+create policy "carpool_bookings_select_own_or_driver_or_admin" on carpool_bookings
+  for select using (
+    passenger_id = auth.uid()
+    or exists (
+      select 1 from carpools c
+      join events e on e.id = c.event_id
+      join teams t on t.id = e.team_id
+      where c.id = carpool_bookings.carpool_id
+        and (c.driver_id = auth.uid() or is_tenant_admin(t.tenant_id))
+    )
+  );
+
+create policy "carpool_bookings_insert_own" on carpool_bookings
+  for insert with check (passenger_id = auth.uid());
+
+create policy "carpool_bookings_delete_own_or_driver" on carpool_bookings
+  for delete using (
+    passenger_id = auth.uid()
+    or exists (
+      select 1 from carpools c
+      where c.id = carpool_bookings.carpool_id
+        and c.driver_id = auth.uid()
+    )
+  );
+
+alter table chat_messages enable row level security;
+
+create policy "chat_messages_select_team_member" on chat_messages
+  for select using (
+    exists (
+      select 1 from team_members tm
+      where tm.team_id = chat_messages.team_id
+        and tm.user_id = auth.uid()
+    )
+  );
+
+create policy "chat_messages_insert_team_member" on chat_messages
+  for insert with check (
+    author_id = auth.uid()
+    and exists (
+      select 1 from team_members tm
+      where tm.team_id = chat_messages.team_id
+        and tm.user_id = auth.uid()
+    )
+  );
+
+alter table push_tokens enable row level security;
+
+create policy "push_tokens_own" on push_tokens
+  for all using (user_id = auth.uid());
+
+alter table notifications enable row level security;
+
+create policy "notifications_select_own" on notifications
+  for select using (user_id = auth.uid());
+
+create policy "notifications_update_own_read" on notifications
+  for update using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+alter table licenses enable row level security;
+
+create policy "licenses_select_tenant_member_or_supervisor" on licenses
+  for select using (
+    tenant_id = any(auth_jwt_tenant_ids())
+    or is_supervised_tenant(tenant_id)
+  );
+
+create policy "licenses_write_admin" on licenses
+  for all using (is_tenant_admin(tenant_id));
+
+alter table federation_connectors enable row level security;
+
+create policy "federation_connectors_admin_only" on federation_connectors
+  for all using (is_tenant_admin(tenant_id));
+
+alter table federation_sync_logs enable row level security;
+
+create policy "federation_sync_logs_admin_only" on federation_sync_logs
+  for select using (
+    exists (
+      select 1 from federation_connectors fc
+      where fc.id = federation_sync_logs.connector_id
+        and is_tenant_admin(fc.tenant_id)
+    )
+  );
+
+alter table consents enable row level security;
+
+create policy "consents_own" on consents
+  for all using (user_id = auth.uid());
+
+alter table data_requests enable row level security;
+
+create policy "data_requests_select_own" on data_requests
+  for select using (user_id = auth.uid());
+
+create policy "data_requests_insert_own" on data_requests
+  for insert with check (user_id = auth.uid());

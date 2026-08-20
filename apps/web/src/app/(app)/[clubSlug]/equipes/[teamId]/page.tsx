@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
-import { PlayerRoster } from "@clubos/ui";
 import { createClient } from "@/lib/supabase/server";
-import type { TeamMemberRole } from "@clubos/database";
+import { RosterManager } from "./RosterManager";
 
 export default async function EquipeDetailPage({
   params,
@@ -13,32 +12,46 @@ export default async function EquipeDetailPage({
 
   const { data: team } = await supabase
     .from("teams")
-    .select("id, name, category, sport:sports(name)")
+    .select("id, name, category, tenant_id, sport:sports(name)")
     .eq("id", teamId)
     .maybeSingle();
 
   if (!team) notFound();
 
-  const { data: members } = await supabase
-    .from("team_members")
-    .select("role, profile:profiles(id, first_name, last_name, avatar_url)")
-    .eq("team_id", teamId);
+  const [{ data: members }, { data: clubMembers }] = await Promise.all([
+    supabase
+      .from("team_members")
+      .select("id, role, profile:profiles(id, first_name, last_name, avatar_url)")
+      .eq("team_id", teamId),
+    supabase
+      .from("memberships")
+      .select("profile:profiles(id, first_name, last_name)")
+      .eq("tenant_id", team.tenant_id)
+      .eq("status", "active")
+      .in("role", ["player", "coach"]),
+  ]);
 
-  const roster = (members ?? []).map((m) => {
-    const profile = m.profile as unknown as {
-      id: string;
-      first_name: string;
-      last_name: string;
-      avatar_url: string | null;
-    };
-    return {
-      id: profile.id,
-      firstName: profile.first_name,
-      lastName: profile.last_name,
-      avatarUrl: profile.avatar_url,
-      role: m.role as TeamMemberRole,
-    };
-  });
+  type RawTeamMember = {
+    id: string;
+    role: string;
+    profile: { id: string; first_name: string; last_name: string; avatar_url: string | null } | null;
+  };
+  type RawMembership = { profile: { id: string; first_name: string; last_name: string } | null };
+
+  const roster = ((members ?? []) as unknown as RawTeamMember[])
+    .filter((m) => m.profile)
+    .map((m) => ({
+      teamMemberId: m.id,
+      id: m.profile!.id,
+      firstName: m.profile!.first_name,
+      lastName: m.profile!.last_name,
+      role: m.role,
+    }));
+
+  const rosterProfileIds = new Set(roster.map((r) => r.id));
+  const availableMembers = ((clubMembers ?? []) as unknown as RawMembership[])
+    .filter((m) => m.profile && !rosterProfileIds.has(m.profile.id))
+    .map((m) => ({ id: m.profile!.id, firstName: m.profile!.first_name, lastName: m.profile!.last_name }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,13 +62,7 @@ export default async function EquipeDetailPage({
         </p>
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
-        {roster.length > 0 ? (
-          <PlayerRoster players={roster} />
-        ) : (
-          <p className="text-sm text-slate-400">Aucun membre dans cette équipe pour l&apos;instant.</p>
-        )}
-      </div>
+      <RosterManager teamId={team.id} initialRoster={roster} availableMembers={availableMembers} />
     </div>
   );
 }
